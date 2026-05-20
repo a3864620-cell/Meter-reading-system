@@ -47,6 +47,34 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;font-size:20px;display:flex;align-items:center;justify-content:center;border-radius:8px}
 .icon-btn:active{background:var(--bg2)}
 
+/* 月份選擇器樣式 */
+.month-selector-wrap {
+  padding: 6px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.month-label {
+  font-size: 13px;
+  color: var(--text2);
+  font-weight: 500;
+}
+.month-select {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+  font-weight: 600;
+}
+
 /* Views */
 #views{flex:1;overflow:hidden;position:relative}
 .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:12px 16px;padding-bottom:calc(66px + env(safe-area-inset-bottom))}
@@ -172,6 +200,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
     </div>
   </div>
 
+  <div class="month-selector-wrap">
+    <span class="month-label">查詢月份：</span>
+    <select id="month-select" class="month-select"></select>
+  </div>
+
   <div id="views">
     <div id="v1" class="view on"></div>
 
@@ -252,7 +285,8 @@ const API = 'https://script.google.com/macros/s/AKfycbzQ93Z4rBlK33p5x_SZLsYyabU6
 const ENGINEERS = ['李哲倫', '林冠廷', '卓明弦', '鄭可立'];
 const LSKEY = 'meter_name_v1';
 const now = new Date();
-const MKEY = `${now.getFullYear()}-${now.getMonth()+1}`;
+
+let MKEY = `${now.getFullYear()}-${now.getMonth()+1}`;
 
 const RAW=[
 ['HZ-L-001','李哲倫','三民區','永慶1F',''],['HZ-L-002','李哲倫','三民區','裕昌-陽明','25號'],
@@ -288,7 +322,7 @@ const RAW=[
 ['HZ-L-067','李哲倫','左營區','六順當舖',''],['HZ-L-068','李哲倫','左營區','龍進1F/2F/3F','25號'],
 ['HZ-L-069','李哲倫','左營區','銘大',''],['HZ-L-070','李哲倫','左營區','駿易-劉丁源',''],
 ['HZ-L-071','李哲倫','左營區','源盛','25號'],['HZ-L-072','李哲倫','左營區','展熠(勢至)',''],
-['HZ-L-073','李哲倫','左營區','凌華',''],['HZ-L-074','李哲倫','左營區','敬立工程行',''],
+['HZ-L-073','李哲倫','左營區','開源',''],['HZ-L-074','李哲倫','左營區','敬立工程行',''],
 ['HZ-L-075','李哲倫','左營區','民樂(鼓山護愛)',''],['HZ-L-078','李哲倫','彌陀區','彌仁公托',''],
 ['HZ-L-079','李哲倫','彌陀區','永誠彌陀工地',''],['HZ-L-080','李哲倫','梓官區','丞富工程',''],
 ['HZ-L-081','李哲倫','梓官區','禾康',''],['HZ-L-082','李哲倫','楠梓區','新亞楠梓*7','20號'],
@@ -299,13 +333,13 @@ const RAW=[
 ['HZ-L-093','李哲倫','橋頭區','岳勇',''],['HZ-L-094','李哲倫','橋頭區','甲圍國小',''],
 ['HZ-L-095','李哲倫','橋頭區','晉欣成功北路',''],['HZ-L-096','李哲倫','永安區','柏正',''],
 ['HZ-L-097','李哲倫','永安區','正騏科技',''],['HZ-L-098','李哲倫','永安區','永安幼兒園',''],
-['HZ-L-099','李哲倫','湖內區','湖內幼兒園',''],['HZ-L-100','李哲倫','燕巢區','歐美石材',''],
-['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','李哲倫','美濃區','益群豐',''],
-['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','李哲倫','路竹區','福隆鋁業*2',''],
+['HZ-L-099','Ilonga','湖內區','湖內幼兒園',''],['HZ-L-100','燕巢區','歐美石材',''],
+['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','美濃區','益群豐',''],
+['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','路竹區','福隆鋁業*2',''],
 ['HZ-L-106','Media','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
-['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','李哲倫','鼓山區','歐晉宏建築師',''],
-['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','李哲倫','鼓山區','永誠開發',''],
-['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','李哲倫','鼓山區','信祥','25號'],
+['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','鼓山區','歐晉宏建築師',''],
+['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','鼓山區','永誠開發',''],
+['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','鼓山區','信祥','25號'],
 ['HZ-L-117','李哲倫','鼓山區','揚運國際',''],
 ['HZ-T-001','林冠廷','三民區','佳訸房屋',''],['HZ-T-002','林冠廷','三民區','祥順當舖*2',''],
 ['HZ-T-003','林冠廷','三民區','新亞三民','20號'],['HZ-T-006','李哲倫','仁武區','安記輪胎(T)',''],
@@ -364,7 +398,7 @@ const RAW=[
 ['HZ-T-127','林冠廷','苓雅區','輝創(新光路)','20號前'],['HZ-T-128','林冠廷','苓雅區','榮信-武營',''],
 ['HZ-T-129','林冠廷','苓雅區','榮佑-輜汽',''],['HZ-T-130','林冠廷','苓雅區','玄光通基金會',''],
 ['HZ-T-131','林冠廷','苓雅區','中正O8管理室',''],['HZ-T-132','林冠廷','鳥松區','龍進聖殿*2','25號'],
-['HZ-T-133','林冠廷','鳥松區','愛種樹','25號'],['HZ-T-134','林冠廷','鳥松區','金務大(鳥松)',''],
+['HZ-T-133','鳥松區','愛種樹','25號'],['HZ-T-134','林冠廷','鳥松區','金務大(鳥松)',''],
 ['HZ-T-136','林冠廷','鳳山區','富岳工程',''],['HZ-T-137','林冠廷','鳳山區','長傑營造',''],
 ['HZ-T-138','林冠廷','鳳山區','長期(信義)','25號'],['HZ-T-139','林冠廷','鳳山區','長新診所',''],
 ['HZ-T-140','林冠廷','鳳山區','愛里長照',''],['HZ-T-141','林冠廷','鳳山區','元泰',''],
@@ -381,8 +415,27 @@ RAW.forEach(r=>clients[r[0]]={id:r[0],person:r[1],area:r[2],name:r[3],note:r[4]}
 let doneMap={};
 let myName=localStorage.getItem(LSKEY)||'';
 let pendingId=null;
-let scanActive=false,scanTimer=null; // 改用定時器優化
+let scanActive=false,scanTimer=null;
 let curP='all',curA='all',curS='all';
+
+function initMonthOptions(){
+  const select = document.getElementById('month-select');
+  select.innerHTML = '';
+  for(let i = -6; i <= 6; i++){
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const val = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const txt = `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`;
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = txt;
+    if(val === MKEY) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.onchange = () => {
+    MKEY = select.value;
+    loadCloud();
+  };
+}
 
 function setSyncState(s,msg){
   const d=document.getElementById('sdot'),l=document.getElementById('slbl');
@@ -436,9 +489,10 @@ function renderOverview(){
       return`<div class="ar"><span class="ardot ${pct===100?'dg':pct>0?'da':'dr'}"></span><span class="ar-name">${a}</span><span class="ar-cnt">${v.done}/${v.total}</span></div>`;
     }).join('');
   }
+  const displayMonth = MKEY.replace('-','/');
   document.getElementById('v1').innerHTML=`
     <div class="ov-stat">
-      <h3>本月進度 ${now.getFullYear()}/${now.getMonth()+1}</h3>
+      <h3>本月進度 ${displayMonth}</h3>
       <div class="ov-nums">
         <span class="ov-big">${s.done}</span>
         <span class="ov-rest">/ ${s.total} 已完成 &nbsp;·&nbsp; 尚餘 <b>${s.todo}</b> 筆</span>
@@ -454,7 +508,7 @@ function renderOverview(){
     </div>`;}).join('')}
     <div class="row-btns">
       <button class="btn-ghost" onclick="switchView('2')">查看未完成清單 →</button>
-      <button class="btn-ghost btn-danger" onclick="resetMonth()">重設本月</button>
+      <button class="btn-ghost btn-danger" onclick="resetMonth()">重設此月記錄</button>
     </div>`;
 }
 
@@ -557,7 +611,6 @@ async function undoModal(){
 }
 
 function showPicker(){
-  const NAMES=ENGINEERS.filter(n=>n&&!n.startsWith('工程師'));
   const names=ENGINEERS;
   document.getElementById('eng-list').innerHTML=names.filter(n=>n.trim()).map(n=>
     `<button class="eng-btn" onclick="selectName('${n}')">
@@ -581,12 +634,12 @@ function switchView(n){
 }
 
 function resetMonth(){
-  if(!confirm('確定清除本月所有抄表記錄？'))return;
+  if(!confirm(`確定清除 ${MKEY} 的所有本地抄表記錄？`))return;
   doneMap={};renderAll();
-  alert('本地已清除。如需清除雲端，請到 Google Sheet 手動刪除本月資料列。');
+  alert('本地已清除。如需清除雲端，請到 Google Sheet 手動刪除資料列。');
 }
 
-// QR Scanner - 直接替換優化版邏輯
+// QR Scanner - 終極修復版
 function startScan(){
   if(!navigator.mediaDevices?.getUserMedia){
     document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;
@@ -604,10 +657,10 @@ function startScan(){
   navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
     const v=document.getElementById('qr-vid');
     v.srcObject=stream;
-    v.setAttribute("playsinline", true); // 防止 iOS 強制全螢幕播放
+    v.setAttribute("playsinline", true);
     v.play();
     scanActive=true;
-    scanTimer = setInterval(scanFrame, 200); // 每 200ms 檢查一次，提高效能與辨識率
+    scanTimer = setInterval(scanFrame, 200);
   }).catch((err)=>{
     console.error(err);
     document.getElementById('smsg').textContent='⚠️ 相機啟動失敗，請改用手動輸入';
@@ -620,22 +673,46 @@ function scanFrame(){
   const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
   if(v.readyState===v.HAVE_ENOUGH_DATA && v.videoWidth > 0){
     const ctx = cv.getContext('2d');
-    cv.width=v.videoWidth;
-    cv.height=v.videoHeight;
-    ctx.drawImage(v,0,0,cv.width,cv.height);
     
-    const img=ctx.getImageData(0,0,cv.width,cv.height);
-    const code=window.jsQR&&jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+    // 💡 關鍵修正：只有在解析度真的有變時才重設寬高，鎖定記憶體分配，不讓影像丟失
+    if (cv.width !== v.videoWidth || cv.height !== v.videoHeight) {
+      cv.width = v.videoWidth;
+      cv.height = v.videoHeight;
+    }
+    
+    ctx.drawImage(v, 0, 0, cv.width, cv.height);
+    const img = ctx.getImageData(0, 0, cv.width, cv.height);
+    
+    if (!window.jsQR) {
+      document.getElementById('smsg').textContent='⚠️ 條碼解析庫加載中，請稍候...';
+      return;
+    }
+    
+    // 💡 升級解碼參數：同時檢查正相與反相條碼
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+    
     if(code?.data){
-      const id=code.data.trim().toUpperCase();
-      if(clients[id]){
+      const rawId = code.data.trim().toUpperCase();
+      
+      // 💡 防呆機制：若條碼包網址（如 https://...id=HZ-L-001），自動擷取純服務編號
+      let cleanId = null;
+      if (clients[rawId]) {
+        cleanId = rawId;
+      } else {
+        const regexMatch = rawId.match(/HZ-[LT]-\d+/);
+        if (regexMatch && clients[regexMatch[0]]) {
+          cleanId = regexMatch[0];
+        }
+      }
+      
+      if(cleanId){
         scanActive=false;
         if(scanTimer) { clearInterval(scanTimer); scanTimer = null; }
-        document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
-        if(navigator.vibrate) navigator.vibrate(100); // 支援的手機提供微震動回饋
-        openModal(id);
+        document.getElementById('smsg').textContent='✅ 找到：'+clients[cleanId].name;
+        if(navigator.vibrate) navigator.vibrate(100);
+        openModal(cleanId);
       } else {
-        document.getElementById('smsg').textContent='解碼內容：'+id+' (非系統服務編號)';
+        document.getElementById('smsg').textContent='條碼內容：'+rawId+' (非系統服務編號)';
       }
     }
   }
@@ -668,6 +745,7 @@ document.getElementById('man-in').addEventListener('keydown',e=>{if(e.key==='Ent
 document.querySelectorAll('.nb').forEach(b=>b.onclick=()=>switchView(b.dataset.v));
 
 if(myName)document.getElementById('name-pill').textContent=myName;
+initMonthOptions();
 buildFilters();
 loadCloud();
 setInterval(loadCloud,60000);

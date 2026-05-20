@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="抄表管理"/>
+<meta name="theme-color" content="#ffffff"/>
+<title>抄表管理系統</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#fff;--bg2:#f5f5f4;--bg3:#ebe9e8;
+  --text:#1c1917;--text2:#78716c;--text3:#a8a29e;
+  --border:#e7e5e4;--border2:#d6d3d1;
+  --green:#16a34a;--gbg:#f0fdf4;--gtxt:#15803d;
+  --red:#dc2626;--rbg:#fef2f2;--rtxt:#b91c1c;
+  --amber:#d97706;--abg:#fffbeb;--atxt:#92400e;
+  --blue:#2563eb;
+  --r:10px;--rl:14px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
+  --text:#f5f5f0;--text2:#a8a29e;--text3:#57534e;
+  --border:#3a3a3c;--border2:#48484a;
+  --green:#4ade80;--gbg:#052e16;--gtxt:#4ade80;
+  --red:#f87171;--rbg:#450a0a;--rtxt:#f87171;
+  --amber:#fbbf24;--abg:#451a03;--atxt:#fbbf24;
+  --blue:#60a5fa;
+}}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100dvh;height:100vh}
+
+/* Header */
+#hdr{padding:8px 16px;padding-top:calc(8px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
+.hdr-l{display:flex;align-items:center;gap:8px}
+.hdr-title{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.name-pill{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--bg2);color:var(--text2);border:1px solid var(--border2);cursor:pointer;white-space:nowrap;font-weight:500}
+.hdr-r{display:flex;align-items:center;gap:4px}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.sdot.spin{background:var(--amber);animation:blink 1s infinite}
+.sdot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.slbl{font-size:11px;color:var(--text3);margin-right:4px}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;font-size:20px;display:flex;align-items:center;justify-content:center;border-radius:8px}
+.icon-btn:active{background:var(--bg2)}
+
+/* Views */
+#views{flex:1;overflow:hidden;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:12px 16px;padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+.view.on{display:block}
+
+/* Bottom nav */
+#nav{height:calc(54px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;position:relative;font-family:inherit}
+.nb svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.nb.on{color:var(--blue)}
+.nbdot{position:absolute;top:6px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:999px;font-weight:700;display:none}
+
+/* Overview */
+.ov-stat{background:var(--bg2);border-radius:var(--rl);padding:14px 16px;margin-bottom:12px}
+.ov-stat h3{font-size:12px;color:var(--text2);font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.ov-nums{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.ov-big{font-size:32px;font-weight:700;color:var(--green)}
+.ov-rest{font-size:14px;color:var(--text2)}
+.ov-rest b{color:var(--red);font-weight:600}
+.pbar{height:8px;background:var(--border);border-radius:999px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:999px;background:var(--green);transition:width .5s ease}
+.pbar-pct{font-size:12px;color:var(--text3);margin-top:5px}
+.psec{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px}
+.psec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.psec-name{font-size:15px;font-weight:600}
+.psec-stat{font-size:13px;color:var(--text2)}
+.psec-bar{height:5px;background:var(--bg2);border-radius:999px;overflow:hidden;margin-bottom:10px}
+.psec-fill{height:100%;border-radius:999px;background:var(--green);transition:width .5s}
+.ar{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.ar:last-child{border:none;padding-bottom:0}
+.ardot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dg{background:var(--green)}.da{background:var(--amber)}.dr{background:var(--red)}
+.ar-name{font-size:13px;flex:1;color:var(--text)}
+.ar-cnt{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
+.row-btns{display:flex;gap:8px;margin-bottom:10px}
+.btn-ghost{flex:1;padding:10px;font-size:13px;background:none;border:1px solid var(--border2);border-radius:var(--r);cursor:pointer;color:var(--text);font-family:inherit;font-weight:500}
+.btn-ghost:active{background:var(--bg2)}
+.btn-danger{color:var(--red);border-color:var(--rbg)}
+
+/* List */
+.fbar{display:flex;gap:6px;padding-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fbar::-webkit-scrollbar{display:none}
+.chip{padding:6px 14px;border-radius:999px;border:1px solid var(--border2);background:none;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit}
+.chip.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:500}
+.searchbox{position:relative;margin-bottom:10px}
+.searchbox input{width:100%;padding:10px 14px 10px 36px;border:1px solid var(--border2);border-radius:var(--r);font-size:15px;background:var(--bg);color:var(--text);outline:none;font-family:inherit}
+.searchbox input:focus{border-color:var(--blue)}
+.searchbox svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.shd{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;padding-left:2px}
+.ci{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;background:var(--bg);transition:background .1s}
+.ci:active{background:var(--bg2)}
+.ci.done{opacity:.5}
+.ck{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
+.ck svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.ck.ok{background:var(--gbg);border-color:var(--green);color:var(--green)}
+.ci-body{flex:1;min-width:0}
+.ci-name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ci-sub{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:10px;padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;font-weight:600}
+.bg{background:var(--gbg);color:var(--gtxt)}.br{background:var(--rbg);color:var(--rtxt)}.ba{background:var(--abg);color:var(--atxt)}
+.empty{text-align:center;color:var(--text3);font-size:14px;padding:40px 0}
+
+/* Scan */
+.scan-page{padding:16px 0}
+.scan-page p{font-size:14px;color:var(--text2);margin-bottom:16px;text-align:center;line-height:1.6}
+.btn-scan{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:var(--rl);font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit}
+.btn-scan:active{opacity:.85}
+#vid-wrap{display:none;position:relative;background:#000;border-radius:var(--rl);overflow:hidden;aspect-ratio:1;margin:14px 0}
+#vid-wrap video{width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.scan-frame div{width:56%;aspect-ratio:1;border:2.5px solid #4ade80;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
+#smsg{font-size:13px;color:var(--text2);text-align:center;min-height:20px;margin:4px 0 12px}
+.btn-stop{width:100%;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer;display:none;font-family:inherit;color:var(--text)}
+.divider{border:none;border-top:1px solid var(--border);margin:18px 0}
+.manual-label{font-size:13px;color:var(--text2);margin-bottom:8px;display:block}
+.manual-row{display:flex;gap:8px}
+.manual-row input{flex:1;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--r);font-size:15px;background:var(--bg);color:var(--text);outline:none;font-family:inherit;text-transform:uppercase}
+.manual-row input:focus{border-color:var(--blue)}
+.btn-find{padding:0 16px;background:none;border:1px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer;color:var(--text);font-family:inherit;white-space:nowrap}
+.btn-find:active{background:var(--bg2)}
+
+/* Modal overlay */
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center}
+#ov.on{display:flex}
+#modal{background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:540px}
+.modal-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 16px}
+.modal-name{font-size:18px;font-weight:700;margin-bottom:4px}
+.modal-meta{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px}
+.modal-meta .done-info{color:var(--green);font-weight:500}
+.modal-acts{display:flex;gap:8px}
+.btn-confirm{flex:1;padding:13px;background:var(--green);color:#fff;border:none;border-radius:var(--rl);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-confirm:active{opacity:.85}
+.btn-cancel{padding:13px 16px;background:none;border:1px solid var(--border2);border-radius:var(--rl);font-size:14px;cursor:pointer;color:var(--text2);font-family:inherit}
+.btn-cancel:active{background:var(--bg2)}
+.btn-undo{padding:13px 14px;background:var(--rbg);border:1px solid var(--rbg);border-radius:var(--rl);font-size:13px;cursor:pointer;color:var(--rtxt);font-family:inherit;font-weight:600;display:none}
+.btn-undo:active{opacity:.8}
+
+/* Name picker */
+#picker{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;align-items:center;justify-content:center;padding:20px}
+#picker.on{display:flex}
+#picker-box{background:var(--bg);border-radius:var(--rl);padding:20px;width:100%;max-width:340px}
+#picker-box h2{font-size:17px;font-weight:700;margin-bottom:4px}
+#picker-box p{font-size:13px;color:var(--text2);margin-bottom:14px}
+.eng-list{display:flex;flex-direction:column;gap:8px}
+.eng-btn{padding:13px 16px;border:1px solid var(--border);border-radius:var(--r);background:none;font-size:15px;cursor:pointer;text-align:left;font-family:inherit;color:var(--text);font-weight:500;display:flex;align-items:center;gap:10px}
+.eng-btn:active{background:var(--bg2)}
+.eng-icon{width:30px;height:30px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:14px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hdr">
+    <div class="hdr-l">
+      <span class="hdr-title">⚡ 抄表管理</span>
+      <span class="name-pill" id="name-pill" onclick="showPicker()">選擇名字</span>
+    </div>
+    <div class="hdr-r">
+      <span class="sdot" id="sdot"></span>
+      <span class="slbl" id="slbl"></span>
+      <button class="icon-btn" onclick="loadCloud()" title="重新整理">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="views">
+    <div id="v1" class="view on"></div>
+
+    <div id="v2" class="view">
+      <div class="fbar" id="fbar"></div>
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search" type="search" placeholder="搜尋客戶名稱或服務編號…" />
+      </div>
+      <div id="list-out"></div>
+    </div>
+
+    <div id="v3" class="view">
+      <div class="scan-page">
+        <p>掃描貼在現場的 QR Code<br>即時標記並同步到雲端</p>
+        <button class="btn-scan" id="btn-scan">
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="#fff" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+          開啟相機掃描
+        </button>
+        <div id="vid-wrap">
+          <video id="qr-vid" autoplay playsinline muted></video>
+          <canvas id="qr-cv" style="display:none"></canvas>
+          <div class="scan-frame"><div></div></div>
+        </div>
+        <div id="smsg"></div>
+        <button class="btn-stop" id="btn-stop">停止掃描</button>
+        <hr class="divider">
+        <label class="manual-label">找不到 QR？手動輸入服務編號</label>
+        <div class="manual-row">
+          <input id="man-in" type="text" placeholder="HZ-L-001" />
+          <button class="btn-find" id="btn-man">查找</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="nav">
+    <button class="nb on" data-v="1">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      總覽
+    </button>
+    <button class="nb" data-v="2">
+      <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      清單
+      <span class="nbdot" id="nbdot"></span>
+    </button>
+    <button class="nb" data-v="3">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+      掃表
+    </button>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div id="ov" onclick="e => {if(e.target===this)closeModal()}">
+  <div id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-name" id="m-name"></div>
+    <div class="modal-meta" id="m-meta"></div>
+    <div class="modal-acts">
+      <button class="btn-cancel" id="m-cancel">取消</button>
+      <button class="btn-undo" id="m-undo">撤銷</button>
+      <button class="btn-confirm" id="m-confirm">✓ 確認已抄表</button>
+    </div>
+  </div>
+</div>
+
+<!-- Name picker -->
+<div id="picker">
+  <div id="picker-box">
+    <h2>選擇你的名字</h2>
+    <p>抄表記錄將以此名字儲存到雲端</p>
+    <div class="eng-list" id="eng-list"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzQ93Z4rBlK33p5x_SZLsYyabU6LUln3-YAwmOrAEolADzecBsPViGLHs_WT7uc1DnChA/exec';
+const ENGINEERS = ['李哲倫', '林冠廷', '工程師三', '工程師四'];
+const LSKEY = 'meter_name_v1';
+const now = new Date();
+const MKEY = `${now.getFullYear()}-${now.getMonth()+1}`;
+
+const RAW=[
+['HZ-L-001','李哲倫','三民區','永慶1F',''],['HZ-L-002','李哲倫','三民區','裕昌-陽明','25號'],
+['HZ-L-003','李哲倫','三民區','盈慶',''],['HZ-L-004','李哲倫','三民區','磐古',''],
+['HZ-L-005','李哲倫','三民區','昀峰國際',''],['HZ-L-006','李哲倫','三民區','建和',''],
+['HZ-L-007','李哲倫','三民區','旭陞',''],['HZ-L-008','李哲倫','三民區','萊恩設計',''],
+['HZ-L-009','李哲倫','三民區','禾旺當舖',''],['HZ-L-010','李哲倫','三民區','永昇當鋪',''],
+['HZ-L-011','李哲倫','三民區','加賀當鋪',''],['HZ-L-012','李哲倫','三民區','慶大當鋪',''],
+['HZ-L-013','李哲倫','三民區','立信保全',''],['HZ-L-014','李哲倫','三民區','綠十字國際',''],
+['HZ-L-015','李哲倫','三民區','鼎金教會',''],['HZ-L-016','李哲倫','三民區','榮佑-大順*2','25號'],
+['HZ-L-017','李哲倫','三民區','陳嘉晉建築3F',''],['HZ-L-018','李哲倫','三民區','高雄牧場',''],
+['HZ-L-019','李哲倫','三民區','台灣百樂',''],['HZ-L-020','李哲倫','三民區','威揚補習班',''],
+['HZ-L-022','李哲倫','仁武區','明鴻(一廠)',''],['HZ-L-023','李哲倫','仁武區','明鴻(二廠)',''],
+['HZ-L-024','李哲倫','仁武區','安記輪胎',''],['HZ-L-025','李哲倫','仁武區','三雄','25號'],
+['HZ-L-026','李哲倫','仁武區','陳主任(先端1)',''],['HZ-L-027','李哲倫','仁武區','先端2',''],
+['HZ-L-029','李哲倫','台南','威林-台南',''],['HZ-L-030','李哲倫','台南','龍進(公司)',''],
+['HZ-L-031','李哲倫','台南','奕豪',''],['HZ-L-032','李哲倫','台南','勝凱*2',''],
+['HZ-L-033','李哲倫','台南','佳盛(麻豆)',''],['HZ-L-034','李哲倫','台南','日鎂',''],
+['HZ-L-035','李哲倫','台南','裕昌永康','25號'],['HZ-L-037','李哲倫','台南','誠勇工程-七股',''],
+['HZ-L-038','李哲倫','台南','東明-國泰',''],['HZ-L-039','李哲倫','台南','惠民實業',''],
+['HZ-L-040','李哲倫','台南','麻豆心芽協會',''],['HZ-L-041','李哲倫','台南','龍進空軍','25號'],
+['HZ-L-042','李哲倫','台南','龍近海科園區','25號'],['HZ-L-043','李哲倫','台南','景興營建',''],
+['HZ-L-044','李哲倫','台南','順野機電',''],['HZ-L-045','李哲倫','台南','晉欣仁德',''],
+['HZ-L-046','李哲倫','嘉義區','晉欣*3',''],['HZ-L-047','李哲倫','嘉義區','丞宏實業',''],
+['HZ-L-048','李哲倫','大社區','尚浩',''],['HZ-L-049','李哲倫','岡山區','三聯*2','20號'],
+['HZ-L-050','李哲倫','岡山區','瀚璿程','20號'],['HZ-L-051','李哲倫','岡山區','裕昌-岡山*3','25號'],
+['HZ-L-052','李哲倫','岡山區','佳盛',''],['HZ-L-053','李哲倫','左營區','瑞興發*9',''],
+['HZ-L-054','李哲倫','左營區','益虔科技',''],['HZ-L-055','李哲倫','左營區','獎卿左營','15號'],
+['HZ-L-059','李哲倫','左營區','裕昌大中*4',''],['HZ-L-060','李哲倫','左營區','東之素(巨蛋)','25號'],
+['HZ-L-061','李哲倫','左營區','喜登',''],['HZ-L-062','李哲倫','左營區','富禾',''],
+['HZ-L-063','李哲倫','左營區','龍華國中',''],['HZ-L-064','李哲倫','左營區','真旺當鋪',''],
+['HZ-L-065','李哲倫','左營區','大友當舖',''],['HZ-L-066','李哲倫','左營區','吉盛當舖',''],
+['HZ-L-067','李哲倫','左營區','六順當舖',''],['HZ-L-068','李哲倫','左營區','龍進1F/2F/3F','25號'],
+['HZ-L-069','李哲倫','左營區','銘大',''],['HZ-L-070','李哲倫','左營區','駿易-劉丁源',''],
+['HZ-L-071','李哲倫','左營區','源盛','25號'],['HZ-L-072','李哲倫','左營區','展熠(勢至)',''],
+['HZ-L-073','李哲倫','左營區','凌華',''],['HZ-L-074','李哲倫','左營區','敬立工程行',''],
+['HZ-L-075','李哲倫','左營區','民樂(鼓山護愛)',''],['HZ-L-078','李哲倫','彌陀區','彌仁公托',''],
+['HZ-L-079','李哲倫','彌陀區','永誠彌陀工地',''],['HZ-L-080','李哲倫','梓官區','丞富工程',''],
+['HZ-L-081','李哲倫','梓官區','禾康',''],['HZ-L-082','李哲倫','楠梓區','新亞楠梓*7','20號'],
+['HZ-L-083','李哲倫','楠梓區','獎卿楠梓','15號'],['HZ-L-084','李哲倫','楠梓區','居恩長照','20號'],
+['HZ-L-085','李哲倫','楠梓區','沛科(飛刻)','20號'],['HZ-L-086','李哲倫','楠梓區','高雄大學-防災',''],
+['HZ-L-087','李哲倫','楠梓區','瑞興發*3',''],['HZ-L-088','李哲倫','楠梓區','興連城','20號'],
+['HZ-L-089','李哲倫','楠梓區','長期(後昌)','25號'],['HZ-L-092','李哲倫','橋頭區','欣建*15','25號'],
+['HZ-L-093','李哲倫','橋頭區','岳勇',''],['HZ-L-094','李哲倫','橋頭區','甲圍國小',''],
+['HZ-L-095','李哲倫','橋頭區','晉欣成功北路',''],['HZ-L-096','李哲倫','永安區','柏正',''],
+['HZ-L-097','李哲倫','永安區','正騏科技',''],['HZ-L-098','李哲倫','永安區','永安幼兒園',''],
+['HZ-L-099','李哲倫','湖內區','湖內幼兒園',''],['HZ-L-100','李哲倫','燕巢區','歐美石材',''],
+['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','李哲倫','美濃區','益群豐',''],
+['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','李哲倫','路竹區','福隆鋁業*2',''],
+['HZ-L-106','李哲倫','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
+['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','李哲倫','鼓山區','歐晉宏建築師',''],
+['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','李哲倫','鼓山區','永誠開發',''],
+['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','李哲倫','鼓山區','信祥','25號'],
+['HZ-L-117','李哲倫','鼓山區','揚運國際',''],
+['HZ-T-001','林冠廷','三民區','佳訸房屋',''],['HZ-T-002','林冠廷','三民區','祥順當舖*2',''],
+['HZ-T-003','林冠廷','三民區','新亞三民','20號'],['HZ-T-006','李哲倫','仁武區','安記輪胎(T)',''],
+['HZ-T-007','林冠廷','仁武區','三英-1F',''],['HZ-T-008','林冠廷','仁武區','三英-2F',''],
+['HZ-T-009','林冠廷','仁武區','三英-特殊鋼',''],['HZ-T-010','林冠廷','仁武區','三英鋼鐵(品管)',''],
+['HZ-T-011','林冠廷','仁武區','祥旺','25號'],['HZ-T-012','林冠廷','仁武區','高川','25號'],
+['HZ-T-013','林冠廷','仁武區','金承昱',''],['HZ-T-014','林冠廷','仁武區','金維裕',''],
+['HZ-T-015','林冠廷','仁武區','李羅劉',''],['HZ-T-016','林冠廷','仁武區','誠勇工程',''],
+['HZ-T-017','林冠廷','仁武區','加市多',''],['HZ-T-018','林冠廷','前金區','協銓中正',''],
+['HZ-T-020','林冠廷','前金區','鼎力旅行社',''],['HZ-T-021','林冠廷','前金區','百合旅行社',''],
+['HZ-T-023','林冠廷','前鎮區','裕昌一心*4','25號'],['HZ-T-024','林冠廷','前鎮區','元海鄉-3F','20號'],
+['HZ-T-025','林冠廷','前鎮區','元海鄉-2F',''],['HZ-T-026','林冠廷','前鎮區','元家6F','20號'],
+['HZ-T-027','林冠廷','前鎮區','台大校友會',''],['HZ-T-028','林冠廷','前鎮區','華新油漆',''],
+['HZ-T-029','林冠廷','前鎮區','岱陞科技',''],['HZ-T-030','林冠廷','前鎮區','笙百',''],
+['HZ-T-031','林冠廷','前鎮區','洋鑫',''],['HZ-T-032','林冠廷','前鎮區','威日1F','25號'],
+['HZ-T-033','林冠廷','前鎮區','威日5F',''],['HZ-T-034','林冠廷','前鎮區','威日6F',''],
+['HZ-T-035','林冠廷','前鎮區','林少尹律師',''],['HZ-T-036','林冠廷','前鎮區','群益',''],
+['HZ-T-037','林冠廷','前鎮區','齊鑫',''],['HZ-T-038','林冠廷','前鎮區','嘉福機電',''],
+['HZ-T-039','林冠廷','前鎮區','德和(九禾)','25號'],['HZ-T-040','林冠廷','前鎮區','競合智數位',''],
+['HZ-T-045','林冠廷','大寮區','輝創合發*7','20號前'],['HZ-T-046','林冠廷','大寮區','華鋐科技',''],
+['HZ-T-047','林冠廷','大寮區','焺有節能',''],['HZ-T-048','林冠廷','大寮區','代成-1F',''],
+['HZ-T-049','林冠廷','大寮區','代成-2F',''],['HZ-T-050','林冠廷','大寮區','飛快',''],
+['HZ-T-051','林冠廷','大寮區','聚昱',''],['HZ-T-052','林冠廷','大寮區','益和興',''],
+['HZ-T-053','林冠廷','大寮區','協銓',''],['HZ-T-054','林冠廷','大寮區','晉欣大寮',''],
+['HZ-T-055','林冠廷','大寮區','鴻宇',''],['HZ-T-056','林冠廷','大寮區','長照鳳屏*2','25號'],
+['HZ-T-057','林冠廷','大寮區','長照鳳屏470號','25號'],['HZ-T-058','林冠廷','大寮區','周潮煌',''],
+['HZ-T-059','林冠廷','大寮區','代天府',''],['HZ-T-060','林冠廷','大寮區','大寮公托',''],
+['HZ-T-061','林冠廷','大寮區','金辰長照',''],['HZ-T-062','林冠廷','大寮區','捷茂(東恩)',''],
+['HZ-T-064','林冠廷','大樹區','三力食品',''],['HZ-T-065','林冠廷','大樹區','鑫泉1F/3F',''],
+['HZ-T-066','林冠廷','大樹區','喬智城',''],['HZ-T-067','林冠廷','大樹區','維盛發',''],
+['HZ-T-068','林冠廷','小港區','佳音-小港',''],['HZ-T-069','林冠廷','小港區','小港公托(明義)',''],
+['HZ-T-070','林冠廷','小港區','大鼎耐火(包錶)',''],['HZ-T-071','林冠廷','小港區','合興居家長照',''],
+['HZ-T-072','林冠廷','小港區','普竣淨化',''],['HZ-T-073','林冠廷','小港區','永記-發送(租)','25號'],
+['HZ-T-074','林冠廷','小港區','永記-管理(租)',''],['HZ-T-075','林冠廷','小港區','永記-生管(租)',''],
+['HZ-T-076','林冠廷','小港區','永記造漆(買)',''],['HZ-T-078','林冠廷','屏東','詠新實業','25號'],
+['HZ-T-079','林冠廷','屏東','兆恆*2','25號'],['HZ-T-080','林冠廷','屏東','兆恆地磅',''],
+['HZ-T-081','林冠廷','屏東','大恆1F','25號'],['HZ-T-082','林冠廷','屏東','大恆2F',''],
+['HZ-T-083','林冠廷','屏東','力陞健復',''],['HZ-T-085','林冠廷','屏東','晶鷹(包錶)',''],
+['HZ-T-086','林冠廷','屏東','新潮',''],['HZ-T-087','林冠廷','屏東','僑美',''],
+['HZ-T-088','林冠廷','屏東','宏偉冷凍','25號'],['HZ-T-089','林冠廷','屏東','協原動能',''],
+['HZ-T-090','林冠廷','屏東','明鴻(屏東)',''],['HZ-T-091','林冠廷','屏東','右達-屏東','25號'],
+['HZ-T-092','林冠廷','屏東','右達-服務廠','25號'],['HZ-T-093','林冠廷','屏東','佳音-社皮',''],
+['HZ-T-094','林冠廷','屏東','佳音-萬丹',''],['HZ-T-095','林冠廷','屏東','師大數理',''],
+['HZ-T-096','林冠廷','屏東','逸帆',''],['HZ-T-097','林冠廷','屏東','明光明文教',''],
+['HZ-T-098','林冠廷','屏東','榮信KIA','25號'],['HZ-T-099','林冠廷','屏東','榮佑MG*3','25號'],
+['HZ-T-100','林冠廷','屏東','龍進屏東高中*2','25號'],['HZ-T-101','林冠廷','屏東','榮興屏東','25號'],
+['HZ-T-102','林冠廷','屏東','吉利地政士',''],['HZ-T-107','林冠廷','新興區','思宇環境',''],
+['HZ-T-108','林冠廷','新興區','軒博文化',''],['HZ-T-109','林冠廷','新興區','合發',''],
+['HZ-T-110','林冠廷','新興區','銀樓公會',''],['HZ-T-111','林冠廷','新興區','誠信(苓雅)',''],
+['HZ-T-112','林冠廷','新興區','協能',''],['HZ-T-114','林冠廷','旗津區','旗津道酒店*2',''],
+['HZ-T-117','林冠廷','林園區','佳音-林園',''],['HZ-T-118','林冠廷','林園區','循環能資','25號'],
+['HZ-T-119','林冠廷','苓雅區','洪千琪事務所','月底'],['HZ-T-120','林冠廷','苓雅區','百分百地政士',''],
+['HZ-T-121','林冠廷','苓雅區','沐青長照',''],['HZ-T-122','林冠廷','苓雅區','長行行銷',''],
+['HZ-T-123','林冠廷','苓雅區','寶佳',''],['HZ-T-124','林冠廷','苓雅區','村金',''],
+['HZ-T-125','林冠廷','苓雅區','宸佳衛浴',''],['HZ-T-126','林冠廷','苓雅區','國雲科技','20號前'],
+['HZ-T-127','林冠廷','苓雅區','輝創(新光路)','20號前'],['HZ-T-128','林冠廷','苓雅區','榮信-武營',''],
+['HZ-T-129','林冠廷','苓雅區','榮佑-輜汽',''],['HZ-T-130','林冠廷','苓雅區','玄光通基金會',''],
+['HZ-T-131','林冠廷','苓雅區','中正O8管理室',''],['HZ-T-132','林冠廷','鳥松區','龍進聖殿*2','25號'],
+['HZ-T-133','林冠廷','鳥松區','愛種樹','25號'],['HZ-T-134','林冠廷','鳥松區','金務大(鳥松)',''],
+['HZ-T-136','林冠廷','鳳山區','富岳工程',''],['HZ-T-137','林冠廷','鳳山區','長傑營造',''],
+['HZ-T-138','林冠廷','鳳山區','長期(信義)','25號'],['HZ-T-139','林冠廷','鳳山區','長新診所',''],
+['HZ-T-140','林冠廷','鳳山區','愛里長照',''],['HZ-T-141','林冠廷','鳳山區','元泰',''],
+['HZ-T-142','林冠廷','鳳山區','馨迦居長照',''],['HZ-T-143','林冠廷','鳳山區','榮信-自由路','25號'],
+['HZ-T-144','林冠廷','鳳山區','榮佑-澄清','25號'],['HZ-T-145','林冠廷','鳳山區','裕豐聯',''],
+['HZ-T-146','林冠廷','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
+['HZ-T-148','林冠廷','鳳山區','佳音-五甲',''],['HZ-T-149','林冠廷','鳳山區','華鼎',''],
+['HZ-T-151','林冠廷','鹽埕區','華大成工地',''],['HZ-T-152','林冠廷','鹽埕區','永記五福*2',''],
+];
+
+const clients={};
+RAW.forEach(r=>clients[r[0]]={id:r[0],person:r[1],area:r[2],name:r[3],note:r[4]});
+
+let doneMap={};
+let myName=localStorage.getItem(LSKEY)||'';
+let pendingId=null;
+let scanActive=false,scanRaf=null;
+let curP='all',curA='all',curS='all';
+
+function setSyncState(s,msg){
+  const d=document.getElementById('sdot'),l=document.getElementById('slbl');
+  d.className='sdot'+(s==='spin'?' spin':s==='err'?' err':'');
+  l.textContent=msg||'';
+}
+
+async function loadCloud(){
+  setSyncState('spin','同步中…');
+  try{
+    const r=await fetch(`${API}?action=getStatus&month=${MKEY}`);
+    const d=await r.json();
+    if(d.ok){
+      doneMap=d.done||{};
+      renderAll();
+      const t=new Date();
+      setSyncState('ok',`${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 已更新`);
+    } else setSyncState('err','同步失敗');
+  }catch(e){setSyncState('err','網路錯誤');}
+}
+
+async function apiCall(p){
+  try{await fetch(API+'?'+new URLSearchParams(p));}catch(e){}
+}
+
+function isDone(id){return!!doneMap[id];}
+
+function stats(){
+  const a=Object.values(clients),done=a.filter(c=>isDone(c.id)).length;
+  return{total:a.length,done,todo:a.length-done,pct:a.length?Math.round(done/a.length*100):0};
+}
+function pStats(p){
+  const a=Object.values(clients).filter(c=>c.person===p),done=a.filter(c=>isDone(c.id)).length;
+  return{total:a.length,done,todo:a.length-done,pct:a.length?Math.round(done/a.length*100):0};
+}
+function aStats(p){
+  const m={};
+  Object.values(clients).filter(c=>c.person===p).forEach(c=>{
+    if(!m[c.area])m[c.area]={done:0,total:0};
+    m[c.area].total++;if(isDone(c.id))m[c.area].done++;
+  });
+  return m;
+}
+
+function renderOverview(){
+  const s=stats();
+  const persons=[...new Set(Object.values(clients).map(c=>c.person))];
+  function aRows(areas){
+    return Object.entries(areas).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).map(([a,v])=>{
+      const pct=Math.round(v.done/v.total*100);
+      return`<div class="ar"><span class="ardot ${pct===100?'dg':pct>0?'da':'dr'}"></span><span class="ar-name">${a}</span><span class="ar-cnt">${v.done}/${v.total}</span></div>`;
+    }).join('');
+  }
+  document.getElementById('v1').innerHTML=`
+    <div class="ov-stat">
+      <h3>本月進度 ${now.getFullYear()}/${now.getMonth()+1}</h3>
+      <div class="ov-nums">
+        <span class="ov-big">${s.done}</span>
+        <span class="ov-rest">/ ${s.total} 已完成 &nbsp;·&nbsp; 尚餘 <b>${s.todo}</b> 筆</span>
+      </div>
+      <div class="pbar"><div class="pbar-fill" style="width:${s.pct}%"></div></div>
+      <div class="pbar-pct">${s.pct}%</div>
+    </div>
+    ${persons.map(p=>{const ps=pStats(p);return`
+    <div class="psec">
+      <div class="psec-hd"><span class="psec-name">${p}</span><span class="psec-stat">${ps.done}/${ps.total} · 剩 ${ps.todo}</span></div>
+      <div class="psec-bar"><div class="psec-fill" style="width:${ps.pct}%"></div></div>
+      ${aRows(aStats(p))}
+    </div>`;}).join('')}
+    <div class="row-btns">
+      <button class="btn-ghost" onclick="switchView('2')">查看未完成清單 →</button>
+      <button class="btn-ghost btn-danger" onclick="resetMonth()">重設本月</button>
+    </div>`;
+}
+
+function buildFilters(){
+  const areas=[...new Set(Object.values(clients).map(c=>c.area))].sort((a,b)=>a[0].localeCompare(b[0],['zh']));
+  const persons=[...new Set(Object.values(clients).map(c=>c.person))];
+  document.getElementById('fbar').innerHTML=
+    `<button class="chip on" data-t="s" data-v="all">全部</button>
+     <button class="chip" data-t="s" data-v="todo">未抄表</button>
+     <button class="chip" data-t="s" data-v="done">已抄表</button>
+     ${persons.map(p=>`<button class="chip" data-t="p" data-v="${p}">${p}</button>`).join('')}
+     ${areas.map(a=>`<button class="chip" data-t="a" data-v="${a}">${a}</button>`).join('')}`;
+  document.getElementById('fbar').querySelectorAll('.chip').forEach(btn=>{
+    btn.onclick=()=>{
+      const t=btn.dataset.t,v=btn.dataset.v;
+      document.querySelectorAll(`.chip[data-t="${t}"]`).forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on');
+      if(t==='s')curS=v;if(t==='p'){curP=(curP===v&&v!=='all')?'all':v;if(curP==='all')document.querySelector('.chip[data-t="p"][data-v="all"]')?.classList.add('on');}
+      if(t==='a'){curA=(curA===v)?'all':v;if(curA==='all')btn.classList.remove('on');}
+      renderList();
+    };
+  });
+}
+
+function renderList(){
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  const arr=Object.values(clients).filter(c=>{
+    if(curP!=='all'&&c.person!==curP)return false;
+    if(curA!=='all'&&c.area!==curA)return false;
+    if(curS==='done'&&!isDone(c.id))return false;
+    if(curS==='todo'&&isDone(c.id))return false;
+    if(q&&!c.name.toLowerCase().includes(q)&&!c.id.toLowerCase().includes(q))return false;
+    return true;
+  });
+  const tc=Object.values(clients).filter(c=>!isDone(c.id)).length;
+  const nb=document.getElementById('nbdot');
+  nb.style.display=tc>0?'block':'none';nb.textContent=tc>99?'99+':tc;
+  if(!arr.length){document.getElementById('list-out').innerHTML='<div class="empty">沒有符合的客戶</div>';return;}
+  const groups={};
+  arr.forEach(c=>{if(!groups[c.area])groups[c.area]=[];groups[c.area].push(c);});
+  let html='';
+  Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).forEach(([area,cs])=>{
+    const dc=cs.filter(c=>isDone(c.id)).length;
+    html+=`<div class="shd">${area} ${dc}/${cs.length}</div>`;
+    cs.forEach(c=>{
+      const done=isDone(c.id),info=doneMap[c.id];
+      html+=`<div class="ci ${done?'done':''}" onclick="openModal('${c.id}')">
+        <div class="ck ${done?'ok':''}">
+          ${done?`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`:''}
+        </div>
+        <div class="ci-body">
+          <div class="ci-name">${c.name}</div>
+          <div class="ci-sub">${c.id}${info?' · '+info.by+' '+info.time:''}</div>
+        </div>
+        ${c.note?`<span class="badge ba">${c.note}</span>`:''}
+        <span class="badge ${done?'bg':'br'}">${done?'已抄':'未抄'}</span>
+      </div>`;
+    });
+  });
+  document.getElementById('list-out').innerHTML=html;
+}
+
+function renderAll(){renderOverview();renderList();}
+
+function openModal(id){
+  const c=clients[id];if(!c)return;
+  pendingId=id;
+  const done=isDone(id),info=doneMap[id];
+  document.getElementById('m-name').textContent=c.name;
+  document.getElementById('m-meta').innerHTML=
+    `${c.id} ｜ ${c.area} ｜ ${c.person}`+
+    (c.note?` ｜ <span style="color:var(--amber);font-weight:600">${c.note}抄表</span>`:'')+
+    (done&&info?`<br><span class="done-info">✅ 已由 ${info.by} 抄表（${info.time}）</span>`:'');
+  document.getElementById('m-confirm').textContent=done?'重新確認':'✓ 確認已抄表';
+  document.getElementById('m-undo').style.display=done?'block':'none';
+  document.getElementById('ov').classList.add('on');
+}
+
+function closeModal(){document.getElementById('ov').classList.remove('on');pendingId=null;}
+
+async function confirmModal(){
+  if(!pendingId)return;
+  if(!myName){closeModal();showPicker();return;}
+  const c=clients[pendingId];
+  const t=new Date(),ts=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
+  doneMap[pendingId]={by:myName,time:ts};
+  renderAll();closeModal();stopScan();
+  setSyncState('spin','同步中…');
+  await apiCall({action:'markDone',id:pendingId,name:c.name,area:c.area,by:myName,month:MKEY});
+  setSyncState('ok','已同步');
+}
+
+async function undoModal(){
+  if(!pendingId)return;
+  delete doneMap[pendingId];
+  renderAll();closeModal();
+  setSyncState('spin','同步中…');
+  await apiCall({action:'unmark',id:pendingId,month:MKEY});
+  setSyncState('ok','已同步');
+}
+
+function showPicker(){
+  const NAMES=ENGINEERS.filter(n=>n&&!n.startsWith('工程師'));
+  // Only show non-placeholder names; still show all 4 if configured
+  const names=ENGINEERS;
+  document.getElementById('eng-list').innerHTML=names.filter(n=>n.trim()).map(n=>
+    `<button class="eng-btn" onclick="selectName('${n}')">
+      <div class="eng-icon">👤</div>${n}
+    </button>`
+  ).join('');
+  document.getElementById('picker').classList.add('on');
+}
+
+function selectName(n){
+  myName=n;localStorage.setItem(LSKEY,n);
+  document.getElementById('name-pill').textContent=n;
+  document.getElementById('picker').classList.remove('on');
+}
+
+function switchView(n){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('v'+n).classList.add('on');
+  document.querySelectorAll('.nb').forEach(b=>{b.classList.remove('on');if(b.dataset.v===n)b.classList.add('on');});
+  if(n!=='3')stopScan();
+}
+
+function resetMonth(){
+  if(!confirm('確定清除本月所有抄表記錄？'))return;
+  doneMap={};renderAll();
+  alert('本地已清除。如需清除雲端，請到 Google Sheet 手動刪除本月資料列。');
+}
+
+// QR Scanner
+function startScan(){
+  if(!navigator.mediaDevices?.getUserMedia){
+    document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;
+  }
+  document.getElementById('vid-wrap').style.display='block';
+  document.getElementById('btn-scan').style.display='none';
+  document.getElementById('btn-stop').style.display='block';
+  document.getElementById('smsg').textContent='將 QR Code 對準框框…';
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}).then(stream=>{
+    const v=document.getElementById('qr-vid');v.srcObject=stream;v.play();
+    scanActive=true;requestAnimationFrame(scanFrame);
+  }).catch(()=>{document.getElementById('smsg').textContent='⚠️ 相機被拒絕，請用手動輸入';stopScan();});
+}
+
+function scanFrame(){
+  if(!scanActive)return;
+  const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
+  if(v.readyState===v.HAVE_ENOUGH_DATA){
+    cv.width=v.videoWidth;cv.height=v.videoHeight;
+    cv.getContext('2d').drawImage(v,0,0);
+    const img=cv.getContext('2d').getImageData(0,0,cv.width,cv.height);
+    const code=window.jsQR&&jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+    if(code?.data){
+      const id=code.data.trim().toUpperCase();
+      if(clients[id]){
+        scanActive=false;
+        document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
+        openModal(id);return;
+      }
+    }
+  }
+  scanRaf=requestAnimationFrame(scanFrame);
+}
+
+function stopScan(){
+  scanActive=false;if(scanRaf)cancelAnimationFrame(scanRaf);
+  const v=document.getElementById('qr-vid');
+  if(v.srcObject)v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;
+  document.getElementById('vid-wrap').style.display='none';
+  document.getElementById('btn-scan').style.display='flex';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('smsg').textContent='';
+}
+
+// Init
+document.getElementById('btn-scan').onclick=startScan;
+document.getElementById('btn-stop').onclick=stopScan;
+document.getElementById('m-cancel').onclick=closeModal;
+document.getElementById('m-confirm').onclick=confirmModal;
+document.getElementById('m-undo').onclick=undoModal;
+document.getElementById('ov').onclick=e=>{if(e.target===document.getElementById('ov'))closeModal();};
+document.getElementById('search').oninput=renderList;
+document.getElementById('btn-man').onclick=()=>{
+  const v=document.getElementById('man-in').value.trim().toUpperCase();
+  clients[v]?openModal(v):alert('找不到：'+v);
+};
+document.getElementById('man-in').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-man').click();});
+document.querySelectorAll('.nb').forEach(b=>b.onclick=()=>switchView(b.dataset.v));
+
+if(myName)document.getElementById('name-pill').textContent=myName;
+buildFilters();
+loadCloud();
+setInterval(loadCloud,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadCloud();});
+if(!myName)setTimeout(showPicker,600);
+</script>
+</body>
+</html>

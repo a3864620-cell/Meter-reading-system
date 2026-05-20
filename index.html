@@ -225,7 +225,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   </div>
 </div>
 
-<!-- Confirm modal -->
 <div id="ov" onclick="e => {if(e.target===this)closeModal()}">
   <div id="modal">
     <div class="modal-handle"></div>
@@ -239,7 +238,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   </div>
 </div>
 
-<!-- Name picker -->
 <div id="picker">
   <div id="picker-box">
     <h2>選擇你的名字</h2>
@@ -304,7 +302,7 @@ const RAW=[
 ['HZ-L-099','李哲倫','湖內區','湖內幼兒園',''],['HZ-L-100','李哲倫','燕巢區','歐美石材',''],
 ['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','李哲倫','美濃區','益群豐',''],
 ['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','李哲倫','路竹區','福隆鋁業*2',''],
-['HZ-L-106','李哲倫','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
+['HZ-L-106','Media','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
 ['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','李哲倫','鼓山區','歐晉宏建築師',''],
 ['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','李哲倫','鼓山區','永誠開發',''],
 ['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','李哲倫','鼓山區','信祥','25號'],
@@ -372,7 +370,7 @@ const RAW=[
 ['HZ-T-140','林冠廷','鳳山區','愛里長照',''],['HZ-T-141','林冠廷','鳳山區','元泰',''],
 ['HZ-T-142','林冠廷','鳳山區','馨迦居長照',''],['HZ-T-143','林冠廷','鳳山區','榮信-自由路','25號'],
 ['HZ-T-144','林冠廷','鳳山區','榮佑-澄清','25號'],['HZ-T-145','林冠廷','鳳山區','裕豐聯',''],
-['HZ-T-146','林冠廷','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
+['HZ-T-146','林旺當鋪','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
 ['HZ-T-148','林冠廷','鳳山區','佳音-五甲',''],['HZ-T-149','林冠廷','鳳山區','華鼎',''],
 ['HZ-T-151','林冠廷','鹽埕區','華大成工地',''],['HZ-T-152','林冠廷','鹽埕區','永記五福*2',''],
 ];
@@ -383,7 +381,7 @@ RAW.forEach(r=>clients[r[0]]={id:r[0],person:r[1],area:r[2],name:r[3],note:r[4]}
 let doneMap={};
 let myName=localStorage.getItem(LSKEY)||'';
 let pendingId=null;
-let scanActive=false,scanRaf=null;
+let scanActive=false,scanTimer=null; // 改用定時器優化
 let curP='all',curA='all',curS='all';
 
 function setSyncState(s,msg){
@@ -560,7 +558,6 @@ async function undoModal(){
 
 function showPicker(){
   const NAMES=ENGINEERS.filter(n=>n&&!n.startsWith('工程師'));
-  // Only show non-placeholder names; still show all 4 if configured
   const names=ENGINEERS;
   document.getElementById('eng-list').innerHTML=names.filter(n=>n.trim()).map(n=>
     `<button class="eng-btn" onclick="selectName('${n}')">
@@ -589,7 +586,7 @@ function resetMonth(){
   alert('本地已清除。如需清除雲端，請到 Google Sheet 手動刪除本月資料列。');
 }
 
-// QR Scanner
+// QR Scanner - 直接替換優化版邏輯
 function startScan(){
   if(!navigator.mediaDevices?.getUserMedia){
     document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;
@@ -598,34 +595,55 @@ function startScan(){
   document.getElementById('btn-scan').style.display='none';
   document.getElementById('btn-stop').style.display='block';
   document.getElementById('smsg').textContent='將 QR Code 對準框框…';
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}).then(stream=>{
-    const v=document.getElementById('qr-vid');v.srcObject=stream;v.play();
-    scanActive=true;requestAnimationFrame(scanFrame);
-  }).catch(()=>{document.getElementById('smsg').textContent='⚠️ 相機被拒絕，請用手動輸入';stopScan();});
+  
+  const constraints = {
+    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+    audio: false
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
+    const v=document.getElementById('qr-vid');
+    v.srcObject=stream;
+    v.setAttribute("playsinline", true); // 防止 iOS 強制全螢幕播放
+    v.play();
+    scanActive=true;
+    scanTimer = setInterval(scanFrame, 200); // 每 200ms 檢查一次，提高效能與辨識率
+  }).catch((err)=>{
+    console.error(err);
+    document.getElementById('smsg').textContent='⚠️ 相機啟動失敗，請改用手動輸入';
+    stopScan();
+  });
 }
 
 function scanFrame(){
   if(!scanActive)return;
   const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
-  if(v.readyState===v.HAVE_ENOUGH_DATA){
-    cv.width=v.videoWidth;cv.height=v.videoHeight;
-    cv.getContext('2d').drawImage(v,0,0);
-    const img=cv.getContext('2d').getImageData(0,0,cv.width,cv.height);
+  if(v.readyState===v.HAVE_ENOUGH_DATA && v.videoWidth > 0){
+    const ctx = cv.getContext('2d');
+    cv.width=v.videoWidth;
+    cv.height=v.videoHeight;
+    ctx.drawImage(v,0,0,cv.width,cv.height);
+    
+    const img=ctx.getImageData(0,0,cv.width,cv.height);
     const code=window.jsQR&&jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
     if(code?.data){
       const id=code.data.trim().toUpperCase();
       if(clients[id]){
         scanActive=false;
+        if(scanTimer) { clearInterval(scanTimer); scanTimer = null; }
         document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
-        openModal(id);return;
+        if(navigator.vibrate) navigator.vibrate(100); // 支援的手機提供微震動回饋
+        openModal(id);
+      } else {
+        document.getElementById('smsg').textContent='解碼內容：'+id+' (非系統服務編號)';
       }
     }
   }
-  scanRaf=requestAnimationFrame(scanFrame);
 }
 
 function stopScan(){
-  scanActive=false;if(scanRaf)cancelAnimationFrame(scanRaf);
+  scanActive=false;
+  if(scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   const v=document.getElementById('qr-vid');
   if(v.srcObject)v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;
   document.getElementById('vid-wrap').style.display='none';

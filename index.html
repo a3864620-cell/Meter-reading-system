@@ -34,25 +34,33 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 #app{display:flex;flex-direction:column;height:100dvh;height:100vh}
 
 /* Header */
-#hdr{padding:8px 16px;padding-top:calc(8px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
-.hdr-l{display:flex;align-items:center;gap:8px}
-.hdr-title{font-size:17px;font-weight:700;letter-spacing:-.3px}
-.name-pill{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--bg2);color:var(--text2);border:1px solid var(--border2);cursor:pointer;white-space:nowrap;font-weight:500}
-.hdr-r{display:flex;align-items:center;gap:4px}
-.sdot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+#hdr{padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top));border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
+.hdr-row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.hdr-title{font-size:17px;font-weight:700}
+.hdr-right{display:flex;align-items:center;gap:4px}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
 .sdot.spin{background:var(--amber);animation:blink 1s infinite}
 .sdot.err{background:var(--red)}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.slbl{font-size:11px;color:var(--text3);margin-right:4px}
+.slbl{font-size:11px;color:var(--text3);margin-right:2px}
 .icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;font-size:20px;display:flex;align-items:center;justify-content:center;border-radius:8px}
 .icon-btn:active{background:var(--bg2)}
 
+/* Month bar */
+.month-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.month-bar::-webkit-scrollbar{display:none}
+.mchip{padding:5px 14px;border-radius:999px;border:1px solid var(--border2);background:none;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit;font-weight:500;flex-shrink:0}
+.mchip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.mchip.past{border-style:dashed}
+.readonly-banner{background:var(--abg);color:var(--atxt);font-size:12px;font-weight:600;text-align:center;padding:6px;margin:0 -14px;border-bottom:1px solid var(--abg)}
+.name-pill{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--bg2);color:var(--text2);border:1px solid var(--border2);cursor:pointer;white-space:nowrap;font-weight:500}
+
 /* Views */
 #views{flex:1;overflow:hidden;position:relative}
-.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:12px 16px;padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:12px 14px;padding-bottom:calc(66px + env(safe-area-inset-bottom))}
 .view.on{display:block}
 
-/* Bottom nav */
+/* Nav */
 #nav{height:calc(54px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg)}
 .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;position:relative;font-family:inherit}
 .nb svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -79,7 +87,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ar:last-child{border:none;padding-bottom:0}
 .ardot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .dg{background:var(--green)}.da{background:var(--amber)}.dr{background:var(--red)}
-.ar-name{font-size:13px;flex:1;color:var(--text)}
+.ar-name{font-size:13px;flex:1}
 .ar-cnt{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
 .row-btns{display:flex;gap:8px;margin-bottom:10px}
 .btn-ghost{flex:1;padding:10px;font-size:13px;background:none;border:1px solid var(--border2);border-radius:var(--r);cursor:pointer;color:var(--text);font-family:inherit;font-weight:500}
@@ -96,7 +104,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .searchbox input:focus{border-color:var(--blue)}
 .searchbox svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .shd{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;padding-left:2px}
-.ci{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;background:var(--bg);transition:background .1s}
+.ci{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;background:var(--bg)}
 .ci:active{background:var(--bg2)}
 .ci.done{opacity:.5}
 .ck{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
@@ -114,6 +122,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .scan-page p{font-size:14px;color:var(--text2);margin-bottom:16px;text-align:center;line-height:1.6}
 .btn-scan{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:var(--rl);font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit}
 .btn-scan:active{opacity:.85}
+.scan-month-note{background:var(--gbg);color:var(--gtxt);font-size:13px;font-weight:600;text-align:center;padding:8px 12px;border-radius:var(--r);margin-bottom:14px}
 #vid-wrap{display:none;position:relative;background:#000;border-radius:var(--rl);overflow:hidden;aspect-ratio:1;margin:14px 0}
 #vid-wrap video{width:100%;height:100%;object-fit:cover}
 .scan-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -128,21 +137,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-find{padding:0 16px;background:none;border:1px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer;color:var(--text);font-family:inherit;white-space:nowrap}
 .btn-find:active{background:var(--bg2)}
 
-/* Modal overlay */
+/* Modal */
 #ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center}
 #ov.on{display:flex}
 #modal{background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:540px}
 .modal-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 16px}
 .modal-name{font-size:18px;font-weight:700;margin-bottom:4px}
-.modal-meta{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px}
-.modal-meta .done-info{color:var(--green);font-weight:500}
+.modal-meta{font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:18px}
+.modal-meta .done-info{color:var(--green);font-weight:600}
 .modal-acts{display:flex;gap:8px}
 .btn-confirm{flex:1;padding:13px;background:var(--green);color:#fff;border:none;border-radius:var(--rl);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
 .btn-confirm:active{opacity:.85}
 .btn-cancel{padding:13px 16px;background:none;border:1px solid var(--border2);border-radius:var(--rl);font-size:14px;cursor:pointer;color:var(--text2);font-family:inherit}
 .btn-cancel:active{background:var(--bg2)}
 .btn-undo{padding:13px 14px;background:var(--rbg);border:1px solid var(--rbg);border-radius:var(--rl);font-size:13px;cursor:pointer;color:var(--rtxt);font-family:inherit;font-weight:600;display:none}
-.btn-undo:active{opacity:.8}
 
 /* Name picker */
 #picker{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;align-items:center;justify-content:center;padding:20px}
@@ -159,34 +167,36 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 <body>
 <div id="app">
   <div id="hdr">
-    <div class="hdr-l">
-      <span class="hdr-title">⚡ 抄表管理</span>
-      <span class="name-pill" id="name-pill" onclick="showPicker()">選擇名字</span>
+    <div class="hdr-row1">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="hdr-title">⚡ 抄表管理</span>
+        <span class="name-pill" id="name-pill" onclick="showPicker()">選擇名字</span>
+      </div>
+      <div class="hdr-right">
+        <span class="sdot" id="sdot"></span>
+        <span class="slbl" id="slbl"></span>
+        <button class="icon-btn" onclick="loadCloud()" title="重新整理">
+          <svg viewBox="0 0 24 24" width="20" height="20"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        </button>
+      </div>
     </div>
-    <div class="hdr-r">
-      <span class="sdot" id="sdot"></span>
-      <span class="slbl" id="slbl"></span>
-      <button class="icon-btn" onclick="loadCloud()" title="重新整理">
-        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-      </button>
-    </div>
+    <div class="month-bar" id="month-bar"></div>
   </div>
 
   <div id="views">
     <div id="v1" class="view on"></div>
-
     <div id="v2" class="view">
       <div class="fbar" id="fbar"></div>
       <div class="searchbox">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="search" type="search" placeholder="搜尋客戶名稱或服務編號…" />
+        <input id="search" type="search" placeholder="搜尋客戶名稱或服務編號…"/>
       </div>
       <div id="list-out"></div>
     </div>
-
     <div id="v3" class="view">
       <div class="scan-page">
-        <p>掃描貼在現場的 QR Code<br>即時標記並同步到雲端</p>
+        <div class="scan-month-note" id="scan-month-note"></div>
+        <p>掃描現場 QR Code，記錄到當月並同步雲端</p>
         <button class="btn-scan" id="btn-scan">
           <svg viewBox="0 0 24 24" width="20" height="20" stroke="#fff" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
           開啟相機掃描
@@ -201,7 +211,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
         <hr class="divider">
         <label class="manual-label">找不到 QR？手動輸入服務編號</label>
         <div class="manual-row">
-          <input id="man-in" type="text" placeholder="HZ-L-001" />
+          <input id="man-in" type="text" placeholder="HZ-L-001"/>
           <button class="btn-find" id="btn-man">查找</button>
         </div>
       </div>
@@ -225,34 +235,50 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   </div>
 </div>
 
-<div id="ov" onclick="e => {if(e.target===this)closeModal()}">
+<!-- Modal -->
+<div id="ov" onclick="if(event.target===this)closeModal()">
   <div id="modal">
     <div class="modal-handle"></div>
     <div class="modal-name" id="m-name"></div>
     <div class="modal-meta" id="m-meta"></div>
     <div class="modal-acts">
       <button class="btn-cancel" id="m-cancel">取消</button>
-      <button class="btn-undo" id="m-undo">撤銷</button>
+      <button class="btn-undo" id="m-undo">撤銷抄表</button>
       <button class="btn-confirm" id="m-confirm">✓ 確認已抄表</button>
     </div>
   </div>
 </div>
 
-<div id="picker">
+<!-- Name picker -->
+<div id="picker" onclick="if(event.target===this)this.classList.remove('on')">
   <div id="picker-box">
     <h2>選擇你的名字</h2>
-    <p>抄表記錄將以此名字儲存到雲端</p>
+    <p>記錄將以此名字存入雲端</p>
     <div class="eng-list" id="eng-list"></div>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbzQ93Z4rBlK33p5x_SZLsYyabU6LUln3-YAwmOrAEolADzecBsPViGLHs_WT7uc1DnChA/exec';
-const ENGINEERS = ['李哲倫', '林冠廷', '卓明弦', '鄭可立'];
-const LSKEY = 'meter_name_v1';
-const now = new Date();
-const MKEY = `${now.getFullYear()}-${now.getMonth()+1}`;
+const API='https://script.google.com/macros/s/AKfycbzQ93Z4rBlK33p5x_SZLsYyabU6LUln3-YAwmOrAEolADzecBsPViGLHs_WT7uc1DnChA/exec';
+const ENGINEERS=['李哲倫','林冠廷','工程師三','工程師四'];
+const LSKEY='meter_name_v1';
+
+const now=new Date();
+const TODAY_MKEY=`${now.getFullYear()}-${now.getMonth()+1}`;
+
+// Generate last 6 months list
+function genMonths(){
+  const list=[];
+  for(let i=0;i<6;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    list.push({key:`${d.getFullYear()}-${d.getMonth()+1}`,label:`${d.getMonth()+1}月`,year:d.getFullYear(),month:d.getMonth()+1});
+  }
+  return list;
+}
+const MONTHS=genMonths();
+let viewMonth=TODAY_MKEY; // currently viewed month
+const doneCache={}; // doneCache[mkey] = {id:{by,time},...}
 
 const RAW=[
 ['HZ-L-001','李哲倫','三民區','永慶1F',''],['HZ-L-002','李哲倫','三民區','裕昌-陽明','25號'],
@@ -302,7 +328,7 @@ const RAW=[
 ['HZ-L-099','李哲倫','湖內區','湖內幼兒園',''],['HZ-L-100','李哲倫','燕巢區','歐美石材',''],
 ['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','李哲倫','美濃區','益群豐',''],
 ['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','李哲倫','路竹區','福隆鋁業*2',''],
-['HZ-L-106','Media','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
+['HZ-L-106','李哲倫','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
 ['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','李哲倫','鼓山區','歐晉宏建築師',''],
 ['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','李哲倫','鼓山區','永誠開發',''],
 ['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','李哲倫','鼓山區','信祥','25號'],
@@ -370,7 +396,7 @@ const RAW=[
 ['HZ-T-140','林冠廷','鳳山區','愛里長照',''],['HZ-T-141','林冠廷','鳳山區','元泰',''],
 ['HZ-T-142','林冠廷','鳳山區','馨迦居長照',''],['HZ-T-143','林冠廷','鳳山區','榮信-自由路','25號'],
 ['HZ-T-144','林冠廷','鳳山區','榮佑-澄清','25號'],['HZ-T-145','林冠廷','鳳山區','裕豐聯',''],
-['HZ-T-146','林旺當鋪','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
+['HZ-T-146','林冠廷','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
 ['HZ-T-148','林冠廷','鳳山區','佳音-五甲',''],['HZ-T-149','林冠廷','鳳山區','華鼎',''],
 ['HZ-T-151','林冠廷','鹽埕區','華大成工地',''],['HZ-T-152','林冠廷','鹽埕區','永記五福*2',''],
 ];
@@ -378,29 +404,36 @@ const RAW=[
 const clients={};
 RAW.forEach(r=>clients[r[0]]={id:r[0],person:r[1],area:r[2],name:r[3],note:r[4]});
 
-let doneMap={};
 let myName=localStorage.getItem(LSKEY)||'';
 let pendingId=null;
-let scanActive=false,scanTimer=null; // 改用定時器優化
+let scanActive=false,scanRaf=null;
 let curP='all',curA='all',curS='all';
 
+function isCurrentMonth(){return viewMonth===TODAY_MKEY;}
+function getDone(){return doneCache[viewMonth]||{};}
+function isDone(id){return!!(getDone()[id]);}
+
 function setSyncState(s,msg){
-  const d=document.getElementById('sdot'),l=document.getElementById('slbl');
-  d.className='sdot'+(s==='spin'?' spin':s==='err'?' err':'');
-  l.textContent=msg||'';
+  document.getElementById('sdot').className='sdot'+(s==='spin'?' spin':s==='err'?' err':'');
+  document.getElementById('slbl').textContent=msg||'';
+}
+
+function nowTs(){
+  const t=new Date();
+  return`${t.getMonth()+1}月${t.getDate()}日 ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
 }
 
 async function loadCloud(){
   setSyncState('spin','同步中…');
   try{
-    const r=await fetch(`${API}?action=getStatus&month=${MKEY}`);
+    const r=await fetch(`${API}?action=getStatus&month=${viewMonth}`);
     const d=await r.json();
     if(d.ok){
-      doneMap=d.done||{};
+      doneCache[viewMonth]=d.done||{};
       renderAll();
       const t=new Date();
-      setSyncState('ok',`${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 已更新`);
-    } else setSyncState('err','同步失敗');
+      setSyncState('ok',`${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`);
+    }else setSyncState('err','失敗');
   }catch(e){setSyncState('err','網路錯誤');}
 }
 
@@ -408,41 +441,59 @@ async function apiCall(p){
   try{await fetch(API+'?'+new URLSearchParams(p));}catch(e){}
 }
 
-function isDone(id){return!!doneMap[id];}
+// Month bar
+function buildMonthBar(){
+  const bar=document.getElementById('month-bar');
+  bar.innerHTML=MONTHS.map(m=>
+    `<button class="mchip ${m.key===viewMonth?'on':''} ${m.key!==TODAY_MKEY?'past':''}"
+      data-mkey="${m.key}">${m.key===TODAY_MKEY?'本月 '+m.label:m.year+'年'+m.label}</button>`
+  ).join('');
+  bar.querySelectorAll('.mchip').forEach(btn=>{
+    btn.onclick=()=>{
+      viewMonth=btn.dataset.mkey;
+      buildMonthBar();
+      if(!doneCache[viewMonth])loadCloud();
+      else renderAll();
+      stopScan();
+    };
+  });
+}
 
 function stats(){
-  const a=Object.values(clients),done=a.filter(c=>isDone(c.id)).length;
-  return{total:a.length,done,todo:a.length-done,pct:a.length?Math.round(done/a.length*100):0};
+  const done=getDone();
+  const a=Object.values(clients);
+  const dc=a.filter(c=>done[c.id]).length;
+  return{total:a.length,done:dc,todo:a.length-dc,pct:a.length?Math.round(dc/a.length*100):0};
 }
 function pStats(p){
-  const a=Object.values(clients).filter(c=>c.person===p),done=a.filter(c=>isDone(c.id)).length;
-  return{total:a.length,done,todo:a.length-done,pct:a.length?Math.round(done/a.length*100):0};
+  const done=getDone();
+  const a=Object.values(clients).filter(c=>c.person===p);
+  const dc=a.filter(c=>done[c.id]).length;
+  return{total:a.length,done:dc,todo:a.length-dc,pct:a.length?Math.round(dc/a.length*100):0};
 }
 function aStats(p){
-  const m={};
+  const done=getDone();const m={};
   Object.values(clients).filter(c=>c.person===p).forEach(c=>{
     if(!m[c.area])m[c.area]={done:0,total:0};
-    m[c.area].total++;if(isDone(c.id))m[c.area].done++;
-  });
-  return m;
+    m[c.area].total++;if(done[c.id])m[c.area].done++;
+  });return m;
 }
 
 function renderOverview(){
   const s=stats();
+  const minfo=MONTHS.find(m=>m.key===viewMonth);
+  const mlabel=isCurrentMonth()?'本月':minfo?`${minfo.year}年${minfo.month}月`:'';
   const persons=[...new Set(Object.values(clients).map(c=>c.person))];
-  function aRows(areas){
-    return Object.entries(areas).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).map(([a,v])=>{
-      const pct=Math.round(v.done/v.total*100);
-      return`<div class="ar"><span class="ardot ${pct===100?'dg':pct>0?'da':'dr'}"></span><span class="ar-name">${a}</span><span class="ar-cnt">${v.done}/${v.total}</span></div>`;
-    }).join('');
-  }
+  function aRows(areas){return Object.entries(areas).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).map(([a,v])=>{
+    const pct=Math.round(v.done/v.total*100);
+    return`<div class="ar"><span class="ardot ${pct===100?'dg':pct>0?'da':'dr'}"></span><span class="ar-name">${a}</span><span class="ar-cnt">${v.done}/${v.total}</span></div>`;
+  }).join('');}
   document.getElementById('v1').innerHTML=`
+    ${!isCurrentMonth()?`<div style="background:var(--abg);color:var(--atxt);font-size:13px;font-weight:600;text-align:center;padding:8px;border-radius:var(--r);margin-bottom:10px">📋 查看模式：${mlabel}（唯讀）</div>`:''}
     <div class="ov-stat">
-      <h3>本月進度 ${now.getFullYear()}/${now.getMonth()+1}</h3>
-      <div class="ov-nums">
-        <span class="ov-big">${s.done}</span>
-        <span class="ov-rest">/ ${s.total} 已完成 &nbsp;·&nbsp; 尚餘 <b>${s.todo}</b> 筆</span>
-      </div>
+      <h3>${mlabel} 進度</h3>
+      <div class="ov-nums"><span class="ov-big">${s.done}</span>
+        <span class="ov-rest">/ ${s.total} 已完成 · 尚餘 <b>${s.todo}</b> 筆</span></div>
       <div class="pbar"><div class="pbar-fill" style="width:${s.pct}%"></div></div>
       <div class="pbar-pct">${s.pct}%</div>
     </div>
@@ -452,10 +503,10 @@ function renderOverview(){
       <div class="psec-bar"><div class="psec-fill" style="width:${ps.pct}%"></div></div>
       ${aRows(aStats(p))}
     </div>`;}).join('')}
-    <div class="row-btns">
+    ${isCurrentMonth()?`<div class="row-btns">
       <button class="btn-ghost" onclick="switchView('2')">查看未完成清單 →</button>
       <button class="btn-ghost btn-danger" onclick="resetMonth()">重設本月</button>
-    </div>`;
+    </div>`:''}`;
 }
 
 function buildFilters(){
@@ -472,7 +523,7 @@ function buildFilters(){
       const t=btn.dataset.t,v=btn.dataset.v;
       document.querySelectorAll(`.chip[data-t="${t}"]`).forEach(b=>b.classList.remove('on'));
       btn.classList.add('on');
-      if(t==='s')curS=v;if(t==='p'){curP=(curP===v&&v!=='all')?'all':v;if(curP==='all')document.querySelector('.chip[data-t="p"][data-v="all"]')?.classList.add('on');}
+      if(t==='s')curS=v;if(t==='p')curP=v;
       if(t==='a'){curA=(curA===v)?'all':v;if(curA==='all')btn.classList.remove('on');}
       renderList();
     };
@@ -480,37 +531,40 @@ function buildFilters(){
 }
 
 function renderList(){
+  const done=getDone();
   const q=document.getElementById('search').value.trim().toLowerCase();
   const arr=Object.values(clients).filter(c=>{
     if(curP!=='all'&&c.person!==curP)return false;
     if(curA!=='all'&&c.area!==curA)return false;
-    if(curS==='done'&&!isDone(c.id))return false;
-    if(curS==='todo'&&isDone(c.id))return false;
+    if(curS==='done'&&!done[c.id])return false;
+    if(curS==='todo'&&done[c.id])return false;
     if(q&&!c.name.toLowerCase().includes(q)&&!c.id.toLowerCase().includes(q))return false;
     return true;
   });
-  const tc=Object.values(clients).filter(c=>!isDone(c.id)).length;
+  // Badge: show current month's undone count
+  const curDone=doneCache[TODAY_MKEY]||{};
+  const tc=Object.values(clients).filter(c=>!curDone[c.id]).length;
   const nb=document.getElementById('nbdot');
-  nb.style.display=tc>0?'block':'none';nb.textContent=tc>99?'99+':tc;
+  nb.style.display=tc>0&&isCurrentMonth()?'block':'none';nb.textContent=tc>99?'99+':tc;
   if(!arr.length){document.getElementById('list-out').innerHTML='<div class="empty">沒有符合的客戶</div>';return;}
   const groups={};
   arr.forEach(c=>{if(!groups[c.area])groups[c.area]=[];groups[c.area].push(c);});
   let html='';
   Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).forEach(([area,cs])=>{
-    const dc=cs.filter(c=>isDone(c.id)).length;
+    const dc=cs.filter(c=>done[c.id]).length;
     html+=`<div class="shd">${area} ${dc}/${cs.length}</div>`;
     cs.forEach(c=>{
-      const done=isDone(c.id),info=doneMap[c.id];
-      html+=`<div class="ci ${done?'done':''}" onclick="openModal('${c.id}')">
-        <div class="ck ${done?'ok':''}">
-          ${done?`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`:''}
+      const d=done[c.id];
+      html+=`<div class="ci ${d?'done':''}" onclick="openModal('${c.id}')">
+        <div class="ck ${d?'ok':''}">
+          ${d?`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`:''}
         </div>
         <div class="ci-body">
           <div class="ci-name">${c.name}</div>
-          <div class="ci-sub">${c.id}${info?' · '+info.by+' '+info.time:''}</div>
+          <div class="ci-sub">${c.id}${d?' · '+d.by+' '+d.time:''}</div>
         </div>
         ${c.note?`<span class="badge ba">${c.note}</span>`:''}
-        <span class="badge ${done?'bg':'br'}">${done?'已抄':'未抄'}</span>
+        <span class="badge ${d?'bg':'br'}">${d?'已抄':'未抄'}</span>
       </div>`;
     });
   });
@@ -521,48 +575,50 @@ function renderAll(){renderOverview();renderList();}
 
 function openModal(id){
   const c=clients[id];if(!c)return;
+  const isReadonly=!isCurrentMonth();
+  const done=getDone();const info=done[id];
   pendingId=id;
-  const done=isDone(id),info=doneMap[id];
   document.getElementById('m-name').textContent=c.name;
+  const minfo=MONTHS.find(m=>m.key===viewMonth);
+  const mlabel=isCurrentMonth()?'本月':minfo?`${minfo.year}年${minfo.month}月`:'';
   document.getElementById('m-meta').innerHTML=
     `${c.id} ｜ ${c.area} ｜ ${c.person}`+
     (c.note?` ｜ <span style="color:var(--amber);font-weight:600">${c.note}抄表</span>`:'')+
-    (done&&info?`<br><span class="done-info">✅ 已由 ${info.by} 抄表（${info.time}）</span>`:'');
-  document.getElementById('m-confirm').textContent=done?'重新確認':'✓ 確認已抄表';
-  document.getElementById('m-undo').style.display=done?'block':'none';
+    (!isCurrentMonth()?`<br><span style="color:var(--amber)">📋 ${mlabel} 查看模式（唯讀）</span>`:'')+ 
+    (info?`<br><span class="done-info">✅ ${info.by} 抄表於 ${info.time}</span>`:'');
+  document.getElementById('m-confirm').style.display=isReadonly?'none':'';
+  document.getElementById('m-undo').style.display=(info&&!isReadonly)?'block':'none';
+  document.getElementById('m-confirm').textContent=info?'重新確認':'✓ 確認已抄表';
   document.getElementById('ov').classList.add('on');
 }
 
 function closeModal(){document.getElementById('ov').classList.remove('on');pendingId=null;}
 
 async function confirmModal(){
-  if(!pendingId)return;
+  if(!pendingId||!isCurrentMonth())return;
   if(!myName){closeModal();showPicker();return;}
   const c=clients[pendingId];
-  const t=new Date(),ts=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
-  doneMap[pendingId]={by:myName,time:ts};
+  const ts=nowTs();
+  if(!doneCache[TODAY_MKEY])doneCache[TODAY_MKEY]={};
+  doneCache[TODAY_MKEY][pendingId]={by:myName,time:ts};
   renderAll();closeModal();stopScan();
   setSyncState('spin','同步中…');
-  await apiCall({action:'markDone',id:pendingId,name:c.name,area:c.area,by:myName,month:MKEY});
-  setSyncState('ok','已同步');
+  await apiCall({action:'markDone',id:pendingId,name:c.name,area:c.area,by:myName,month:TODAY_MKEY});
+  setSyncState('ok',nowTs().split(' ')[1]+' 已同步');
 }
 
 async function undoModal(){
-  if(!pendingId)return;
-  delete doneMap[pendingId];
+  if(!pendingId||!isCurrentMonth())return;
+  if(doneCache[TODAY_MKEY])delete doneCache[TODAY_MKEY][pendingId];
   renderAll();closeModal();
   setSyncState('spin','同步中…');
-  await apiCall({action:'unmark',id:pendingId,month:MKEY});
+  await apiCall({action:'unmark',id:pendingId,month:TODAY_MKEY});
   setSyncState('ok','已同步');
 }
 
 function showPicker(){
-  const NAMES=ENGINEERS.filter(n=>n&&!n.startsWith('工程師'));
-  const names=ENGINEERS;
-  document.getElementById('eng-list').innerHTML=names.filter(n=>n.trim()).map(n=>
-    `<button class="eng-btn" onclick="selectName('${n}')">
-      <div class="eng-icon">👤</div>${n}
-    </button>`
+  document.getElementById('eng-list').innerHTML=ENGINEERS.filter(n=>n.trim()).map(n=>
+    `<button class="eng-btn" onclick="selectName('${n}')"><div class="eng-icon">👤</div>${n}</button>`
   ).join('');
   document.getElementById('picker').classList.add('on');
 }
@@ -578,72 +634,114 @@ function switchView(n){
   document.getElementById('v'+n).classList.add('on');
   document.querySelectorAll('.nb').forEach(b=>{b.classList.remove('on');if(b.dataset.v===n)b.classList.add('on');});
   if(n!=='3')stopScan();
+  // Update scan tab note
+  if(n==='3'){
+    const t=new Date();
+    document.getElementById('scan-month-note').textContent=
+      `📅 掃描將記錄到：${t.getFullYear()}年${t.getMonth()+1}月（當月）`;
+  }
 }
 
 function resetMonth(){
-  if(!confirm('確定清除本月所有抄表記錄？'))return;
-  doneMap={};renderAll();
-  alert('本地已清除。如需清除雲端，請到 Google Sheet 手動刪除本月資料列。');
+  if(!confirm('確定清除本月所有抄表記錄？\n此操作不會刪除雲端 Sheet 資料，請手動到 Google Sheet 刪除本月資料列。'))return;
+  doneCache[TODAY_MKEY]={};renderAll();
 }
 
-// QR Scanner - 直接替換優化版邏輯
-function startScan(){
-  if(!navigator.mediaDevices?.getUserMedia){
-    document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;
-  }
+// QR Scanner - hybrid: native BarcodeDetector + jsQR fallback
+let nativeDetector=null;
+let scanAttempts=0;
+let videoStream=null;
+
+async function startScan(){
+  if(!navigator.mediaDevices?.getUserMedia){document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;}
   document.getElementById('vid-wrap').style.display='block';
   document.getElementById('btn-scan').style.display='none';
   document.getElementById('btn-stop').style.display='block';
-  document.getElementById('smsg').textContent='將 QR Code 對準框框…';
-  
-  const constraints = {
-    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-    audio: false
-  };
-
-  navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
-    const v=document.getElementById('qr-vid');
-    v.srcObject=stream;
-    v.setAttribute("playsinline", true); // 防止 iOS 強制全螢幕播放
-    v.play();
-    scanActive=true;
-    scanTimer = setInterval(scanFrame, 200); // 每 200ms 檢查一次，提高效能與辨識率
-  }).catch((err)=>{
-    console.error(err);
-    document.getElementById('smsg').textContent='⚠️ 相機啟動失敗，請改用手動輸入';
-    stopScan();
-  });
-}
-
-function scanFrame(){
-  if(!scanActive)return;
-  const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
-  if(v.readyState===v.HAVE_ENOUGH_DATA && v.videoWidth > 0){
-    const ctx = cv.getContext('2d');
-    cv.width=v.videoWidth;
-    cv.height=v.videoHeight;
-    ctx.drawImage(v,0,0,cv.width,cv.height);
-    
-    const img=ctx.getImageData(0,0,cv.width,cv.height);
-    const code=window.jsQR&&jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
-    if(code?.data){
-      const id=code.data.trim().toUpperCase();
-      if(clients[id]){
-        scanActive=false;
-        if(scanTimer) { clearInterval(scanTimer); scanTimer = null; }
-        document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
-        if(navigator.vibrate) navigator.vibrate(100); // 支援的手機提供微震動回饋
-        openModal(id);
-      } else {
-        document.getElementById('smsg').textContent='解碼內容：'+id+' (非系統服務編號)';
+  document.getElementById('smsg').textContent='相機啟動中…';
+  scanAttempts=0;
+  // Try native BarcodeDetector (iOS 17+, Android Chrome)
+  if('BarcodeDetector' in window){
+    try{
+      const formats=await BarcodeDetector.getSupportedFormats();
+      if(formats.includes('qr_code')){
+        nativeDetector=new BarcodeDetector({formats:['qr_code']});
       }
-    }
+    }catch(e){nativeDetector=null;}
+  }
+  try{
+    // High-resolution back camera with continuous focus
+    videoStream=await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:{ideal:'environment'},
+        width:{ideal:1920},
+        height:{ideal:1080},
+        focusMode:'continuous',
+        advanced:[{focusMode:'continuous'}]
+      },
+      audio:false
+    });
+    const v=document.getElementById('qr-vid');
+    v.srcObject=videoStream;
+    await v.play();
+    scanActive=true;
+    document.getElementById('smsg').textContent=
+      (nativeDetector?'🚀 原生掃描器':'掃描中')+'｜將 QR 對準綠框';
+    requestAnimationFrame(scanFrame);
+  }catch(e){
+    document.getElementById('smsg').textContent='⚠️ 相機錯誤：'+e.message;
+    stopScan();
   }
 }
 
+async function scanFrame(){
+  if(!scanActive)return;
+  const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
+  if(v.readyState===v.HAVE_ENOUGH_DATA){
+    let detected=null;
+    // Try native first (much faster + more accurate)
+    if(nativeDetector){
+      try{
+        const codes=await nativeDetector.detect(v);
+        if(codes&&codes.length>0)detected=codes[0].rawValue;
+      }catch(e){}
+    }
+    // Fallback: jsQR with both inversion attempts
+    if(!detected&&window.jsQR){
+      cv.width=v.videoWidth;cv.height=v.videoHeight;
+      const ctx=cv.getContext('2d',{willReadFrequently:true});
+      ctx.drawImage(v,0,0);
+      const img=ctx.getImageData(0,0,cv.width,cv.height);
+      const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+      if(code?.data)detected=code.data;
+    }
+    if(detected){
+      const raw=detected.trim();
+      const id=raw.toUpperCase();
+      if(clients[id]){
+        if(viewMonth!==TODAY_MKEY){viewMonth=TODAY_MKEY;buildMonthBar();}
+        scanActive=false;
+        document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
+        if(navigator.vibrate)navigator.vibrate(100);
+        openModal(id);return;
+      }else{
+        // QR detected but not matching - show what was scanned
+        document.getElementById('smsg').textContent=`⚠️ 掃到「${raw}」但不在客戶清單中`;
+        scanActive=false;
+        setTimeout(()=>{if(document.getElementById('btn-stop').style.display==='block'){scanActive=true;requestAnimationFrame(scanFrame);}},2000);
+        return;
+      }
+    }
+    scanAttempts++;
+    if(scanAttempts%30===0){
+      document.getElementById('smsg').textContent=
+        (nativeDetector?'🚀 原生掃描器':'掃描中')+`｜已嘗試 ${scanAttempts} 次…若掃不到請按「停止掃描」改用手動輸入`;
+    }
+  }
+  scanRaf=requestAnimationFrame(scanFrame);
+}
+
 function stopScan(){
-  scanActive=false;
-  if(scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  scanActive=false;if(scanRaf)cancelAnimationFrame(scanRaf);
   const v=document.getElementById('qr-vid');
   if(v.srcObject)v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;
   document.getElementById('vid-wrap').style.display='none';
@@ -652,22 +750,28 @@ function stopScan(){
   document.getElementById('smsg').textContent='';
 }
 
-// Init
+// Events
 document.getElementById('btn-scan').onclick=startScan;
 document.getElementById('btn-stop').onclick=stopScan;
 document.getElementById('m-cancel').onclick=closeModal;
 document.getElementById('m-confirm').onclick=confirmModal;
 document.getElementById('m-undo').onclick=undoModal;
-document.getElementById('ov').onclick=e=>{if(e.target===document.getElementById('ov'))closeModal();};
 document.getElementById('search').oninput=renderList;
 document.getElementById('btn-man').onclick=()=>{
   const v=document.getElementById('man-in').value.trim().toUpperCase();
-  clients[v]?openModal(v):alert('找不到：'+v);
+  if(clients[v]){
+    if(viewMonth!==TODAY_MKEY){viewMonth=TODAY_MKEY;buildMonthBar();}
+    openModal(v);
+  }else alert('找不到：'+v);
 };
 document.getElementById('man-in').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-man').click();});
 document.querySelectorAll('.nb').forEach(b=>b.onclick=()=>switchView(b.dataset.v));
 
+// Init
 if(myName)document.getElementById('name-pill').textContent=myName;
+const t=new Date();
+document.getElementById('scan-month-note').textContent=`📅 掃描將記錄到：${t.getFullYear()}年${t.getMonth()+1}月（當月）`;
+buildMonthBar();
 buildFilters();
 loadCloud();
 setInterval(loadCloud,60000);

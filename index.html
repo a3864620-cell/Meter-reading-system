@@ -1,782 +1,1301 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<meta name="mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<meta name="apple-mobile-web-app-title" content="抄表管理"/>
-<meta name="theme-color" content="#ffffff"/>
-<title>抄表管理系統</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b3a5c">
+<title>華芝 抄表暨清潔系統</title>
+<script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{
-  --bg:#fff;--bg2:#f5f5f4;--bg3:#ebe9e8;
-  --text:#1c1917;--text2:#78716c;--text3:#a8a29e;
-  --border:#e7e5e4;--border2:#d6d3d1;
-  --green:#16a34a;--gbg:#f0fdf4;--gtxt:#15803d;
-  --red:#dc2626;--rbg:#fef2f2;--rtxt:#b91c1c;
-  --amber:#d97706;--abg:#fffbeb;--atxt:#92400e;
-  --blue:#2563eb;
-  --r:10px;--rl:14px;
-}
-@media(prefers-color-scheme:dark){:root{
-  --bg:#1c1c1e;--bg2:#2c2c2e;--bg3:#3a3a3c;
-  --text:#f5f5f0;--text2:#a8a29e;--text3:#57534e;
-  --border:#3a3a3c;--border2:#48484a;
-  --green:#4ade80;--gbg:#052e16;--gtxt:#4ade80;
-  --red:#f87171;--rbg:#450a0a;--rtxt:#f87171;
-  --amber:#fbbf24;--abg:#451a03;--atxt:#fbbf24;
-  --blue:#60a5fa;
-}}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;overflow:hidden}
-#app{display:flex;flex-direction:column;height:100dvh;height:100vh}
-
-/* Header */
-#hdr{padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top));border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0}
-.hdr-row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.hdr-title{font-size:17px;font-weight:700}
-.hdr-right{display:flex;align-items:center;gap:4px}
-.sdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
-.sdot.spin{background:var(--amber);animation:blink 1s infinite}
-.sdot.err{background:var(--red)}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.slbl{font-size:11px;color:var(--text3);margin-right:2px}
-.icon-btn{background:none;border:none;cursor:pointer;color:var(--text2);padding:6px;font-size:20px;display:flex;align-items:center;justify-content:center;border-radius:8px}
-.icon-btn:active{background:var(--bg2)}
-
-/* Month bar */
-.month-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-.month-bar::-webkit-scrollbar{display:none}
-.mchip{padding:5px 14px;border-radius:999px;border:1px solid var(--border2);background:none;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit;font-weight:500;flex-shrink:0}
-.mchip.on{background:var(--blue);color:#fff;border-color:var(--blue)}
-.mchip.past{border-style:dashed}
-.readonly-banner{background:var(--abg);color:var(--atxt);font-size:12px;font-weight:600;text-align:center;padding:6px;margin:0 -14px;border-bottom:1px solid var(--abg)}
-.name-pill{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--bg2);color:var(--text2);border:1px solid var(--border2);cursor:pointer;white-space:nowrap;font-weight:500}
-
-/* Views */
-#views{flex:1;overflow:hidden;position:relative}
-.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:12px 14px;padding-bottom:calc(66px + env(safe-area-inset-bottom))}
-.view.on{display:block}
-
-/* Nav */
-#nav{height:calc(54px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg)}
-.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;position:relative;font-family:inherit}
-.nb svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.nb.on{color:var(--blue)}
-.nbdot{position:absolute;top:6px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:999px;font-weight:700;display:none}
-
-/* Overview */
-.ov-stat{background:var(--bg2);border-radius:var(--rl);padding:14px 16px;margin-bottom:12px}
-.ov-stat h3{font-size:12px;color:var(--text2);font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
-.ov-nums{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
-.ov-big{font-size:32px;font-weight:700;color:var(--green)}
-.ov-rest{font-size:14px;color:var(--text2)}
-.ov-rest b{color:var(--red);font-weight:600}
-.pbar{height:8px;background:var(--border);border-radius:999px;overflow:hidden}
-.pbar-fill{height:100%;border-radius:999px;background:var(--green);transition:width .5s ease}
-.pbar-pct{font-size:12px;color:var(--text3);margin-top:5px}
-.psec{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px}
-.psec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.psec-name{font-size:15px;font-weight:600}
-.psec-stat{font-size:13px;color:var(--text2)}
-.psec-bar{height:5px;background:var(--bg2);border-radius:999px;overflow:hidden;margin-bottom:10px}
-.psec-fill{height:100%;border-radius:999px;background:var(--green);transition:width .5s}
-.ar{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
-.ar:last-child{border:none;padding-bottom:0}
-.ardot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.dg{background:var(--green)}.da{background:var(--amber)}.dr{background:var(--red)}
-.ar-name{font-size:13px;flex:1}
-.ar-cnt{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
-.row-btns{display:flex;gap:8px;margin-bottom:10px}
-.btn-ghost{flex:1;padding:10px;font-size:13px;background:none;border:1px solid var(--border2);border-radius:var(--r);cursor:pointer;color:var(--text);font-family:inherit;font-weight:500}
-.btn-ghost:active{background:var(--bg2)}
-.btn-danger{color:var(--red);border-color:var(--rbg)}
-
-/* List */
-.fbar{display:flex;gap:6px;padding-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.fbar::-webkit-scrollbar{display:none}
-.chip{padding:6px 14px;border-radius:999px;border:1px solid var(--border2);background:none;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit}
-.chip.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:500}
-.searchbox{position:relative;margin-bottom:10px}
-.searchbox input{width:100%;padding:10px 14px 10px 36px;border:1px solid var(--border2);border-radius:var(--r);font-size:15px;background:var(--bg);color:var(--text);outline:none;font-family:inherit}
-.searchbox input:focus{border-color:var(--blue)}
-.searchbox svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-.shd{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;padding-left:2px}
-.ci{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;background:var(--bg)}
-.ci:active{background:var(--bg2)}
-.ci.done{opacity:.5}
-.ck{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text3)}
-.ck svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
-.ck.ok{background:var(--gbg);border-color:var(--green);color:var(--green)}
-.ci-body{flex:1;min-width:0}
-.ci-name{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ci-sub{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.badge{font-size:10px;padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;font-weight:600}
-.bg{background:var(--gbg);color:var(--gtxt)}.br{background:var(--rbg);color:var(--rtxt)}.ba{background:var(--abg);color:var(--atxt)}
-.empty{text-align:center;color:var(--text3);font-size:14px;padding:40px 0}
-
-/* Scan */
-.scan-page{padding:16px 0}
-.scan-page p{font-size:14px;color:var(--text2);margin-bottom:16px;text-align:center;line-height:1.6}
-.btn-scan{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:var(--rl);font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit}
-.btn-scan:active{opacity:.85}
-.scan-month-note{background:var(--gbg);color:var(--gtxt);font-size:13px;font-weight:600;text-align:center;padding:8px 12px;border-radius:var(--r);margin-bottom:14px}
-#vid-wrap{display:none;position:relative;background:#000;border-radius:var(--rl);overflow:hidden;aspect-ratio:1;margin:14px 0}
-#vid-wrap video{width:100%;height:100%;object-fit:cover}
-.scan-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-.scan-frame div{width:56%;aspect-ratio:1;border:2.5px solid #4ade80;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
-#smsg{font-size:13px;color:var(--text2);text-align:center;min-height:20px;margin:4px 0 12px}
-.btn-stop{width:100%;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer;display:none;font-family:inherit;color:var(--text)}
-.divider{border:none;border-top:1px solid var(--border);margin:18px 0}
-.manual-label{font-size:13px;color:var(--text2);margin-bottom:8px;display:block}
-.manual-row{display:flex;gap:8px}
-.manual-row input{flex:1;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--r);font-size:15px;background:var(--bg);color:var(--text);outline:none;font-family:inherit;text-transform:uppercase}
-.manual-row input:focus{border-color:var(--blue)}
-.btn-find{padding:0 16px;background:none;border:1px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer;color:var(--text);font-family:inherit;white-space:nowrap}
-.btn-find:active{background:var(--bg2)}
-
-/* Modal */
-#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center}
-#ov.on{display:flex}
-#modal{background:var(--bg);border-radius:20px 20px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:540px}
-.modal-handle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 16px}
-.modal-name{font-size:18px;font-weight:700;margin-bottom:4px}
-.modal-meta{font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:18px}
-.modal-meta .done-info{color:var(--green);font-weight:600}
-.modal-acts{display:flex;gap:8px}
-.btn-confirm{flex:1;padding:13px;background:var(--green);color:#fff;border:none;border-radius:var(--rl);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
-.btn-confirm:active{opacity:.85}
-.btn-cancel{padding:13px 16px;background:none;border:1px solid var(--border2);border-radius:var(--rl);font-size:14px;cursor:pointer;color:var(--text2);font-family:inherit}
-.btn-cancel:active{background:var(--bg2)}
-.btn-undo{padding:13px 14px;background:var(--rbg);border:1px solid var(--rbg);border-radius:var(--rl);font-size:13px;cursor:pointer;color:var(--rtxt);font-family:inherit;font-weight:600;display:none}
-
-/* Name picker */
-#picker{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:110;align-items:center;justify-content:center;padding:20px}
-#picker.on{display:flex}
-#picker-box{background:var(--bg);border-radius:var(--rl);padding:20px;width:100%;max-width:340px}
-#picker-box h2{font-size:17px;font-weight:700;margin-bottom:4px}
-#picker-box p{font-size:13px;color:var(--text2);margin-bottom:14px}
-.eng-list{display:flex;flex-direction:column;gap:8px}
-.eng-btn{padding:13px 16px;border:1px solid var(--border);border-radius:var(--r);background:none;font-size:15px;cursor:pointer;text-align:left;font-family:inherit;color:var(--text);font-weight:500;display:flex;align-items:center;gap:10px}
-.eng-btn:active{background:var(--bg2)}
-.eng-icon{width:30px;height:30px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:14px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#eef1f5;
+       font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+       color:#22303f;-webkit-text-size-adjust:100%}
+  input,select,button,textarea{font-family:inherit}
+  button{cursor:pointer;border:0}
+  #root{max-width:640px;margin:0 auto;padding-bottom:env(safe-area-inset-bottom)}
+  .sp{animation:sp 1s linear infinite}
+  @media print{
+    body{background:#fff}
+    .noprint{display:none !important}
+    #root{max-width:none;padding:0}
+    .lbl-sheet{display:block}
+    .lbl{break-inside:avoid;page-break-inside:avoid}
+    .lbl-page .lbl{page-break-after:always;break-after:page}
+    .lbl-page .lbl:last-child{page-break-after:auto;break-after:auto}
+  }
+  @keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="hdr">
-    <div class="hdr-row1">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="hdr-title">⚡ 抄表管理</span>
-        <span class="name-pill" id="name-pill" onclick="showPicker()">選擇名字</span>
-      </div>
-      <div class="hdr-right">
-        <span class="sdot" id="sdot"></span>
-        <span class="slbl" id="slbl"></span>
-        <button class="icon-btn" onclick="loadCloud()" title="重新整理">
-          <svg viewBox="0 0 24 24" width="20" height="20"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="month-bar" id="month-bar"></div>
-  </div>
+<div id="root"></div>
 
-  <div id="views">
-    <div id="v1" class="view on"></div>
-    <div id="v2" class="view">
-      <div class="fbar" id="fbar"></div>
-      <div class="searchbox">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="search" type="search" placeholder="搜尋客戶名稱或服務編號…"/>
-      </div>
-      <div id="list-out"></div>
-    </div>
-    <div id="v3" class="view">
-      <div class="scan-page">
-        <div class="scan-month-note" id="scan-month-note"></div>
-        <p>掃描現場 QR Code，記錄到當月並同步雲端</p>
-        <button class="btn-scan" id="btn-scan">
-          <svg viewBox="0 0 24 24" width="20" height="20" stroke="#fff" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
-          開啟相機掃描
-        </button>
-        <div id="vid-wrap">
-          <video id="qr-vid" autoplay playsinline muted></video>
-          <canvas id="qr-cv" style="display:none"></canvas>
-          <div class="scan-frame"><div></div></div>
-        </div>
-        <div id="smsg"></div>
-        <button class="btn-stop" id="btn-stop">停止掃描</button>
-        <hr class="divider">
-        <label class="manual-label">找不到 QR？手動輸入服務編號</label>
-        <div class="manual-row">
-          <input id="man-in" type="text" placeholder="HZ-L-001"/>
-          <button class="btn-find" id="btn-man">查找</button>
-        </div>
-      </div>
-    </div>
-  </div>
+<script type="text/babel">
+const {useState, useEffect, useCallback, useRef, useMemo} = React;
 
-  <div id="nav">
-    <button class="nb on" data-v="1">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      總覽
-    </button>
-    <button class="nb" data-v="2">
-      <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      清單
-      <span class="nbdot" id="nbdot"></span>
-    </button>
-    <button class="nb" data-v="3">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
-      掃表
-    </button>
-  </div>
-</div>
+/* ══════════════════════════════════════════════════════════
+   設定 — 部署完 Apps Script 後把網址貼進來
+   ══════════════════════════════════════════════════════════ */
+const API_URL = "https://script.google.com/macros/s/AKfycbxRUqopT1Thd2mpGDEyetnJKdSN-PzAGmuG-4PZrRiOg9J7FejZQcSV281CFAMV-wyxVw/exec";
 
-<!-- Modal -->
-<div id="ov" onclick="if(event.target===this)closeModal()">
-  <div id="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-name" id="m-name"></div>
-    <div class="modal-meta" id="m-meta"></div>
-    <div class="modal-acts">
-      <button class="btn-cancel" id="m-cancel">取消</button>
-      <button class="btn-undo" id="m-undo">撤銷抄表</button>
-      <button class="btn-confirm" id="m-confirm">✓ 確認已抄表</button>
-    </div>
-  </div>
-</div>
-
-<!-- Name picker -->
-<div id="picker" onclick="if(event.target===this)this.classList.remove('on')">
-  <div id="picker-box">
-    <h2>選擇你的名字</h2>
-    <p>記錄將以此名字存入雲端</p>
-    <div class="eng-list" id="eng-list"></div>
-  </div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-<script>
-const API='https://script.google.com/macros/s/AKfycbzQ93Z4rBlK33p5x_SZLsYyabU6LUln3-YAwmOrAEolADzecBsPViGLHs_WT7uc1DnChA/exec';
-const ENGINEERS=['李哲倫','林冠廷','工程師三','工程師四'];
-const LSKEY='meter_name_v1';
-
-const now=new Date();
-const TODAY_MKEY=`${now.getFullYear()}-${now.getMonth()+1}`;
-
-// Generate last 6 months list
-function genMonths(){
-  const list=[];
-  for(let i=0;i<6;i++){
-    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
-    list.push({key:`${d.getFullYear()}-${d.getMonth()+1}`,label:`${d.getMonth()+1}月`,year:d.getFullYear(),month:d.getMonth()+1});
-  }
-  return list;
-}
-const MONTHS=genMonths();
-let viewMonth=TODAY_MKEY; // currently viewed month
-const doneCache={}; // doneCache[mkey] = {id:{by,time},...}
-
-const RAW=[
-['HZ-L-001','李哲倫','三民區','永慶1F',''],['HZ-L-002','李哲倫','三民區','裕昌-陽明','25號'],
-['HZ-L-003','李哲倫','三民區','盈慶',''],['HZ-L-004','李哲倫','三民區','磐古',''],
-['HZ-L-005','李哲倫','三民區','昀峰國際',''],['HZ-L-006','李哲倫','三民區','建和',''],
-['HZ-L-007','李哲倫','三民區','旭陞',''],['HZ-L-008','李哲倫','三民區','萊恩設計',''],
-['HZ-L-009','李哲倫','三民區','禾旺當舖',''],['HZ-L-010','李哲倫','三民區','永昇當鋪',''],
-['HZ-L-011','李哲倫','三民區','加賀當鋪',''],['HZ-L-012','李哲倫','三民區','慶大當鋪',''],
-['HZ-L-013','李哲倫','三民區','立信保全',''],['HZ-L-014','李哲倫','三民區','綠十字國際',''],
-['HZ-L-015','李哲倫','三民區','鼎金教會',''],['HZ-L-016','李哲倫','三民區','榮佑-大順*2','25號'],
-['HZ-L-017','李哲倫','三民區','陳嘉晉建築3F',''],['HZ-L-018','李哲倫','三民區','高雄牧場',''],
-['HZ-L-019','李哲倫','三民區','台灣百樂',''],['HZ-L-020','李哲倫','三民區','威揚補習班',''],
-['HZ-L-022','李哲倫','仁武區','明鴻(一廠)',''],['HZ-L-023','李哲倫','仁武區','明鴻(二廠)',''],
-['HZ-L-024','李哲倫','仁武區','安記輪胎',''],['HZ-L-025','李哲倫','仁武區','三雄','25號'],
-['HZ-L-026','李哲倫','仁武區','陳主任(先端1)',''],['HZ-L-027','李哲倫','仁武區','先端2',''],
-['HZ-L-029','李哲倫','台南','威林-台南',''],['HZ-L-030','李哲倫','台南','龍進(公司)',''],
-['HZ-L-031','李哲倫','台南','奕豪',''],['HZ-L-032','李哲倫','台南','勝凱*2',''],
-['HZ-L-033','李哲倫','台南','佳盛(麻豆)',''],['HZ-L-034','李哲倫','台南','日鎂',''],
-['HZ-L-035','李哲倫','台南','裕昌永康','25號'],['HZ-L-037','李哲倫','台南','誠勇工程-七股',''],
-['HZ-L-038','李哲倫','台南','東明-國泰',''],['HZ-L-039','李哲倫','台南','惠民實業',''],
-['HZ-L-040','李哲倫','台南','麻豆心芽協會',''],['HZ-L-041','李哲倫','台南','龍進空軍','25號'],
-['HZ-L-042','李哲倫','台南','龍近海科園區','25號'],['HZ-L-043','李哲倫','台南','景興營建',''],
-['HZ-L-044','李哲倫','台南','順野機電',''],['HZ-L-045','李哲倫','台南','晉欣仁德',''],
-['HZ-L-046','李哲倫','嘉義區','晉欣*3',''],['HZ-L-047','李哲倫','嘉義區','丞宏實業',''],
-['HZ-L-048','李哲倫','大社區','尚浩',''],['HZ-L-049','李哲倫','岡山區','三聯*2','20號'],
-['HZ-L-050','李哲倫','岡山區','瀚璿程','20號'],['HZ-L-051','李哲倫','岡山區','裕昌-岡山*3','25號'],
-['HZ-L-052','李哲倫','岡山區','佳盛',''],['HZ-L-053','李哲倫','左營區','瑞興發*9',''],
-['HZ-L-054','李哲倫','左營區','益虔科技',''],['HZ-L-055','李哲倫','左營區','獎卿左營','15號'],
-['HZ-L-059','李哲倫','左營區','裕昌大中*4',''],['HZ-L-060','李哲倫','左營區','東之素(巨蛋)','25號'],
-['HZ-L-061','李哲倫','左營區','喜登',''],['HZ-L-062','李哲倫','左營區','富禾',''],
-['HZ-L-063','李哲倫','左營區','龍華國中',''],['HZ-L-064','李哲倫','左營區','真旺當鋪',''],
-['HZ-L-065','李哲倫','左營區','大友當舖',''],['HZ-L-066','李哲倫','左營區','吉盛當舖',''],
-['HZ-L-067','李哲倫','左營區','六順當舖',''],['HZ-L-068','李哲倫','左營區','龍進1F/2F/3F','25號'],
-['HZ-L-069','李哲倫','左營區','銘大',''],['HZ-L-070','李哲倫','左營區','駿易-劉丁源',''],
-['HZ-L-071','李哲倫','左營區','源盛','25號'],['HZ-L-072','李哲倫','左營區','展熠(勢至)',''],
-['HZ-L-073','李哲倫','左營區','凌華',''],['HZ-L-074','李哲倫','左營區','敬立工程行',''],
-['HZ-L-075','李哲倫','左營區','民樂(鼓山護愛)',''],['HZ-L-078','李哲倫','彌陀區','彌仁公托',''],
-['HZ-L-079','李哲倫','彌陀區','永誠彌陀工地',''],['HZ-L-080','李哲倫','梓官區','丞富工程',''],
-['HZ-L-081','李哲倫','梓官區','禾康',''],['HZ-L-082','李哲倫','楠梓區','新亞楠梓*7','20號'],
-['HZ-L-083','李哲倫','楠梓區','獎卿楠梓','15號'],['HZ-L-084','李哲倫','楠梓區','居恩長照','20號'],
-['HZ-L-085','李哲倫','楠梓區','沛科(飛刻)','20號'],['HZ-L-086','李哲倫','楠梓區','高雄大學-防災',''],
-['HZ-L-087','李哲倫','楠梓區','瑞興發*3',''],['HZ-L-088','李哲倫','楠梓區','興連城','20號'],
-['HZ-L-089','李哲倫','楠梓區','長期(後昌)','25號'],['HZ-L-092','李哲倫','橋頭區','欣建*15','25號'],
-['HZ-L-093','李哲倫','橋頭區','岳勇',''],['HZ-L-094','李哲倫','橋頭區','甲圍國小',''],
-['HZ-L-095','李哲倫','橋頭區','晉欣成功北路',''],['HZ-L-096','李哲倫','永安區','柏正',''],
-['HZ-L-097','李哲倫','永安區','正騏科技',''],['HZ-L-098','李哲倫','永安區','永安幼兒園',''],
-['HZ-L-099','李哲倫','湖內區','湖內幼兒園',''],['HZ-L-100','李哲倫','燕巢區','歐美石材',''],
-['HZ-L-101','李哲倫','燕巢區','宏成工程行',''],['HZ-L-102','李哲倫','美濃區','益群豐',''],
-['HZ-L-103','李哲倫','茄萣區','護愛長照協會',''],['HZ-L-105','李哲倫','路竹區','福隆鋁業*2',''],
-['HZ-L-106','李哲倫','路竹區','晉欣*3',''],['HZ-L-108','李哲倫','阿蓮區','章晟*3',''],
-['HZ-L-109','李哲倫','雲林區','惠騰建設',''],['HZ-L-110','李哲倫','鼓山區','歐晉宏建築師',''],
-['HZ-L-111','李哲倫','鼓山區','李永祺',''],['HZ-L-112','李哲倫','鼓山區','永誠開發',''],
-['HZ-L-114','李哲倫','鼓山區','高安*4',''],['HZ-L-116','李哲倫','鼓山區','信祥','25號'],
-['HZ-L-117','李哲倫','鼓山區','揚運國際',''],
-['HZ-T-001','林冠廷','三民區','佳訸房屋',''],['HZ-T-002','林冠廷','三民區','祥順當舖*2',''],
-['HZ-T-003','林冠廷','三民區','新亞三民','20號'],['HZ-T-006','李哲倫','仁武區','安記輪胎(T)',''],
-['HZ-T-007','林冠廷','仁武區','三英-1F',''],['HZ-T-008','林冠廷','仁武區','三英-2F',''],
-['HZ-T-009','林冠廷','仁武區','三英-特殊鋼',''],['HZ-T-010','林冠廷','仁武區','三英鋼鐵(品管)',''],
-['HZ-T-011','林冠廷','仁武區','祥旺','25號'],['HZ-T-012','林冠廷','仁武區','高川','25號'],
-['HZ-T-013','林冠廷','仁武區','金承昱',''],['HZ-T-014','林冠廷','仁武區','金維裕',''],
-['HZ-T-015','林冠廷','仁武區','李羅劉',''],['HZ-T-016','林冠廷','仁武區','誠勇工程',''],
-['HZ-T-017','林冠廷','仁武區','加市多',''],['HZ-T-018','林冠廷','前金區','協銓中正',''],
-['HZ-T-020','林冠廷','前金區','鼎力旅行社',''],['HZ-T-021','林冠廷','前金區','百合旅行社',''],
-['HZ-T-023','林冠廷','前鎮區','裕昌一心*4','25號'],['HZ-T-024','林冠廷','前鎮區','元海鄉-3F','20號'],
-['HZ-T-025','林冠廷','前鎮區','元海鄉-2F',''],['HZ-T-026','林冠廷','前鎮區','元家6F','20號'],
-['HZ-T-027','林冠廷','前鎮區','台大校友會',''],['HZ-T-028','林冠廷','前鎮區','華新油漆',''],
-['HZ-T-029','林冠廷','前鎮區','岱陞科技',''],['HZ-T-030','林冠廷','前鎮區','笙百',''],
-['HZ-T-031','林冠廷','前鎮區','洋鑫',''],['HZ-T-032','林冠廷','前鎮區','威日1F','25號'],
-['HZ-T-033','林冠廷','前鎮區','威日5F',''],['HZ-T-034','林冠廷','前鎮區','威日6F',''],
-['HZ-T-035','林冠廷','前鎮區','林少尹律師',''],['HZ-T-036','林冠廷','前鎮區','群益',''],
-['HZ-T-037','林冠廷','前鎮區','齊鑫',''],['HZ-T-038','林冠廷','前鎮區','嘉福機電',''],
-['HZ-T-039','林冠廷','前鎮區','德和(九禾)','25號'],['HZ-T-040','林冠廷','前鎮區','競合智數位',''],
-['HZ-T-045','林冠廷','大寮區','輝創合發*7','20號前'],['HZ-T-046','林冠廷','大寮區','華鋐科技',''],
-['HZ-T-047','林冠廷','大寮區','焺有節能',''],['HZ-T-048','林冠廷','大寮區','代成-1F',''],
-['HZ-T-049','林冠廷','大寮區','代成-2F',''],['HZ-T-050','林冠廷','大寮區','飛快',''],
-['HZ-T-051','林冠廷','大寮區','聚昱',''],['HZ-T-052','林冠廷','大寮區','益和興',''],
-['HZ-T-053','林冠廷','大寮區','協銓',''],['HZ-T-054','林冠廷','大寮區','晉欣大寮',''],
-['HZ-T-055','林冠廷','大寮區','鴻宇',''],['HZ-T-056','林冠廷','大寮區','長照鳳屏*2','25號'],
-['HZ-T-057','林冠廷','大寮區','長照鳳屏470號','25號'],['HZ-T-058','林冠廷','大寮區','周潮煌',''],
-['HZ-T-059','林冠廷','大寮區','代天府',''],['HZ-T-060','林冠廷','大寮區','大寮公托',''],
-['HZ-T-061','林冠廷','大寮區','金辰長照',''],['HZ-T-062','林冠廷','大寮區','捷茂(東恩)',''],
-['HZ-T-064','林冠廷','大樹區','三力食品',''],['HZ-T-065','林冠廷','大樹區','鑫泉1F/3F',''],
-['HZ-T-066','林冠廷','大樹區','喬智城',''],['HZ-T-067','林冠廷','大樹區','維盛發',''],
-['HZ-T-068','林冠廷','小港區','佳音-小港',''],['HZ-T-069','林冠廷','小港區','小港公托(明義)',''],
-['HZ-T-070','林冠廷','小港區','大鼎耐火(包錶)',''],['HZ-T-071','林冠廷','小港區','合興居家長照',''],
-['HZ-T-072','林冠廷','小港區','普竣淨化',''],['HZ-T-073','林冠廷','小港區','永記-發送(租)','25號'],
-['HZ-T-074','林冠廷','小港區','永記-管理(租)',''],['HZ-T-075','林冠廷','小港區','永記-生管(租)',''],
-['HZ-T-076','林冠廷','小港區','永記造漆(買)',''],['HZ-T-078','林冠廷','屏東','詠新實業','25號'],
-['HZ-T-079','林冠廷','屏東','兆恆*2','25號'],['HZ-T-080','林冠廷','屏東','兆恆地磅',''],
-['HZ-T-081','林冠廷','屏東','大恆1F','25號'],['HZ-T-082','林冠廷','屏東','大恆2F',''],
-['HZ-T-083','林冠廷','屏東','力陞健復',''],['HZ-T-085','林冠廷','屏東','晶鷹(包錶)',''],
-['HZ-T-086','林冠廷','屏東','新潮',''],['HZ-T-087','林冠廷','屏東','僑美',''],
-['HZ-T-088','林冠廷','屏東','宏偉冷凍','25號'],['HZ-T-089','林冠廷','屏東','協原動能',''],
-['HZ-T-090','林冠廷','屏東','明鴻(屏東)',''],['HZ-T-091','林冠廷','屏東','右達-屏東','25號'],
-['HZ-T-092','林冠廷','屏東','右達-服務廠','25號'],['HZ-T-093','林冠廷','屏東','佳音-社皮',''],
-['HZ-T-094','林冠廷','屏東','佳音-萬丹',''],['HZ-T-095','林冠廷','屏東','師大數理',''],
-['HZ-T-096','林冠廷','屏東','逸帆',''],['HZ-T-097','林冠廷','屏東','明光明文教',''],
-['HZ-T-098','林冠廷','屏東','榮信KIA','25號'],['HZ-T-099','林冠廷','屏東','榮佑MG*3','25號'],
-['HZ-T-100','林冠廷','屏東','龍進屏東高中*2','25號'],['HZ-T-101','林冠廷','屏東','榮興屏東','25號'],
-['HZ-T-102','林冠廷','屏東','吉利地政士',''],['HZ-T-107','林冠廷','新興區','思宇環境',''],
-['HZ-T-108','林冠廷','新興區','軒博文化',''],['HZ-T-109','林冠廷','新興區','合發',''],
-['HZ-T-110','林冠廷','新興區','銀樓公會',''],['HZ-T-111','林冠廷','新興區','誠信(苓雅)',''],
-['HZ-T-112','林冠廷','新興區','協能',''],['HZ-T-114','林冠廷','旗津區','旗津道酒店*2',''],
-['HZ-T-117','林冠廷','林園區','佳音-林園',''],['HZ-T-118','林冠廷','林園區','循環能資','25號'],
-['HZ-T-119','林冠廷','苓雅區','洪千琪事務所','月底'],['HZ-T-120','林冠廷','苓雅區','百分百地政士',''],
-['HZ-T-121','林冠廷','苓雅區','沐青長照',''],['HZ-T-122','林冠廷','苓雅區','長行行銷',''],
-['HZ-T-123','林冠廷','苓雅區','寶佳',''],['HZ-T-124','林冠廷','苓雅區','村金',''],
-['HZ-T-125','林冠廷','苓雅區','宸佳衛浴',''],['HZ-T-126','林冠廷','苓雅區','國雲科技','20號前'],
-['HZ-T-127','林冠廷','苓雅區','輝創(新光路)','20號前'],['HZ-T-128','林冠廷','苓雅區','榮信-武營',''],
-['HZ-T-129','林冠廷','苓雅區','榮佑-輜汽',''],['HZ-T-130','林冠廷','苓雅區','玄光通基金會',''],
-['HZ-T-131','林冠廷','苓雅區','中正O8管理室',''],['HZ-T-132','林冠廷','鳥松區','龍進聖殿*2','25號'],
-['HZ-T-133','林冠廷','鳥松區','愛種樹','25號'],['HZ-T-134','林冠廷','鳥松區','金務大(鳥松)',''],
-['HZ-T-136','林冠廷','鳳山區','富岳工程',''],['HZ-T-137','林冠廷','鳳山區','長傑營造',''],
-['HZ-T-138','林冠廷','鳳山區','長期(信義)','25號'],['HZ-T-139','林冠廷','鳳山區','長新診所',''],
-['HZ-T-140','林冠廷','鳳山區','愛里長照',''],['HZ-T-141','林冠廷','鳳山區','元泰',''],
-['HZ-T-142','林冠廷','鳳山區','馨迦居長照',''],['HZ-T-143','林冠廷','鳳山區','榮信-自由路','25號'],
-['HZ-T-144','林冠廷','鳳山區','榮佑-澄清','25號'],['HZ-T-145','林冠廷','鳳山區','裕豐聯',''],
-['HZ-T-146','林冠廷','鳳山區','金旺當鋪',''],['HZ-T-147','林冠廷','鳳山區','建越科技',''],
-['HZ-T-148','林冠廷','鳳山區','佳音-五甲',''],['HZ-T-149','林冠廷','鳳山區','華鼎',''],
-['HZ-T-151','林冠廷','鹽埕區','華大成工地',''],['HZ-T-152','林冠廷','鹽埕區','永記五福*2',''],
-];
-
-const clients={};
-RAW.forEach(r=>clients[r[0]]={id:r[0],person:r[1],area:r[2],name:r[3],note:r[4]});
-
-let myName=localStorage.getItem(LSKEY)||'';
-let pendingId=null;
-let scanActive=false,scanRaf=null;
-let curP='all',curA='all',curS='all';
-
-function isCurrentMonth(){return viewMonth===TODAY_MKEY;}
-function getDone(){return doneCache[viewMonth]||{};}
-function isDone(id){return!!(getDone()[id]);}
-
-function setSyncState(s,msg){
-  document.getElementById('sdot').className='sdot'+(s==='spin'?' spin':s==='err'?' err':'');
-  document.getElementById('slbl').textContent=msg||'';
-}
-
-function nowTs(){
-  const t=new Date();
-  return`${t.getMonth()+1}月${t.getDate()}日 ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
-}
-
-async function loadCloud(){
-  setSyncState('spin','同步中…');
-  try{
-    const r=await fetch(`${API}?action=getStatus&month=${viewMonth}`);
-    const d=await r.json();
-    if(d.ok){
-      doneCache[viewMonth]=d.done||{};
-      renderAll();
-      const t=new Date();
-      setSyncState('ok',`${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`);
-    }else setSyncState('err','失敗');
-  }catch(e){setSyncState('err','網路錯誤');}
-}
-
-async function apiCall(p){
-  try{await fetch(API+'?'+new URLSearchParams(p));}catch(e){}
-}
-
-// Month bar
-function buildMonthBar(){
-  const bar=document.getElementById('month-bar');
-  bar.innerHTML=MONTHS.map(m=>
-    `<button class="mchip ${m.key===viewMonth?'on':''} ${m.key!==TODAY_MKEY?'past':''}"
-      data-mkey="${m.key}">${m.key===TODAY_MKEY?'本月 '+m.label:m.year+'年'+m.label}</button>`
-  ).join('');
-  bar.querySelectorAll('.mchip').forEach(btn=>{
-    btn.onclick=()=>{
-      viewMonth=btn.dataset.mkey;
-      buildMonthBar();
-      if(!doneCache[viewMonth])loadCloud();
-      else renderAll();
-      stopScan();
-    };
-  });
-}
-
-function stats(){
-  const done=getDone();
-  const a=Object.values(clients);
-  const dc=a.filter(c=>done[c.id]).length;
-  return{total:a.length,done:dc,todo:a.length-dc,pct:a.length?Math.round(dc/a.length*100):0};
-}
-function pStats(p){
-  const done=getDone();
-  const a=Object.values(clients).filter(c=>c.person===p);
-  const dc=a.filter(c=>done[c.id]).length;
-  return{total:a.length,done:dc,todo:a.length-dc,pct:a.length?Math.round(dc/a.length*100):0};
-}
-function aStats(p){
-  const done=getDone();const m={};
-  Object.values(clients).filter(c=>c.person===p).forEach(c=>{
-    if(!m[c.area])m[c.area]={done:0,total:0};
-    m[c.area].total++;if(done[c.id])m[c.area].done++;
-  });return m;
-}
-
-function renderOverview(){
-  const s=stats();
-  const minfo=MONTHS.find(m=>m.key===viewMonth);
-  const mlabel=isCurrentMonth()?'本月':minfo?`${minfo.year}年${minfo.month}月`:'';
-  const persons=[...new Set(Object.values(clients).map(c=>c.person))];
-  function aRows(areas){return Object.entries(areas).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).map(([a,v])=>{
-    const pct=Math.round(v.done/v.total*100);
-    return`<div class="ar"><span class="ardot ${pct===100?'dg':pct>0?'da':'dr'}"></span><span class="ar-name">${a}</span><span class="ar-cnt">${v.done}/${v.total}</span></div>`;
-  }).join('');}
-  document.getElementById('v1').innerHTML=`
-    ${!isCurrentMonth()?`<div style="background:var(--abg);color:var(--atxt);font-size:13px;font-weight:600;text-align:center;padding:8px;border-radius:var(--r);margin-bottom:10px">📋 查看模式：${mlabel}（唯讀）</div>`:''}
-    <div class="ov-stat">
-      <h3>${mlabel} 進度</h3>
-      <div class="ov-nums"><span class="ov-big">${s.done}</span>
-        <span class="ov-rest">/ ${s.total} 已完成 · 尚餘 <b>${s.todo}</b> 筆</span></div>
-      <div class="pbar"><div class="pbar-fill" style="width:${s.pct}%"></div></div>
-      <div class="pbar-pct">${s.pct}%</div>
-    </div>
-    ${persons.map(p=>{const ps=pStats(p);return`
-    <div class="psec">
-      <div class="psec-hd"><span class="psec-name">${p}</span><span class="psec-stat">${ps.done}/${ps.total} · 剩 ${ps.todo}</span></div>
-      <div class="psec-bar"><div class="psec-fill" style="width:${ps.pct}%"></div></div>
-      ${aRows(aStats(p))}
-    </div>`;}).join('')}
-    ${isCurrentMonth()?`<div class="row-btns">
-      <button class="btn-ghost" onclick="switchView('2')">查看未完成清單 →</button>
-      <button class="btn-ghost btn-danger" onclick="resetMonth()">重設本月</button>
-    </div>`:''}`;
-}
-
-function buildFilters(){
-  const areas=[...new Set(Object.values(clients).map(c=>c.area))].sort((a,b)=>a[0].localeCompare(b[0],['zh']));
-  const persons=[...new Set(Object.values(clients).map(c=>c.person))];
-  document.getElementById('fbar').innerHTML=
-    `<button class="chip on" data-t="s" data-v="all">全部</button>
-     <button class="chip" data-t="s" data-v="todo">未抄表</button>
-     <button class="chip" data-t="s" data-v="done">已抄表</button>
-     ${persons.map(p=>`<button class="chip" data-t="p" data-v="${p}">${p}</button>`).join('')}
-     ${areas.map(a=>`<button class="chip" data-t="a" data-v="${a}">${a}</button>`).join('')}`;
-  document.getElementById('fbar').querySelectorAll('.chip').forEach(btn=>{
-    btn.onclick=()=>{
-      const t=btn.dataset.t,v=btn.dataset.v;
-      document.querySelectorAll(`.chip[data-t="${t}"]`).forEach(b=>b.classList.remove('on'));
-      btn.classList.add('on');
-      if(t==='s')curS=v;if(t==='p')curP=v;
-      if(t==='a'){curA=(curA===v)?'all':v;if(curA==='all')btn.classList.remove('on');}
-      renderList();
-    };
-  });
-}
-
-function renderList(){
-  const done=getDone();
-  const q=document.getElementById('search').value.trim().toLowerCase();
-  const arr=Object.values(clients).filter(c=>{
-    if(curP!=='all'&&c.person!==curP)return false;
-    if(curA!=='all'&&c.area!==curA)return false;
-    if(curS==='done'&&!done[c.id])return false;
-    if(curS==='todo'&&done[c.id])return false;
-    if(q&&!c.name.toLowerCase().includes(q)&&!c.id.toLowerCase().includes(q))return false;
-    return true;
-  });
-  // Badge: show current month's undone count
-  const curDone=doneCache[TODAY_MKEY]||{};
-  const tc=Object.values(clients).filter(c=>!curDone[c.id]).length;
-  const nb=document.getElementById('nbdot');
-  nb.style.display=tc>0&&isCurrentMonth()?'block':'none';nb.textContent=tc>99?'99+':tc;
-  if(!arr.length){document.getElementById('list-out').innerHTML='<div class="empty">沒有符合的客戶</div>';return;}
-  const groups={};
-  arr.forEach(c=>{if(!groups[c.area])groups[c.area]=[];groups[c.area].push(c);});
-  let html='';
-  Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0],['zh'])).forEach(([area,cs])=>{
-    const dc=cs.filter(c=>done[c.id]).length;
-    html+=`<div class="shd">${area} ${dc}/${cs.length}</div>`;
-    cs.forEach(c=>{
-      const d=done[c.id];
-      html+=`<div class="ci ${d?'done':''}" onclick="openModal('${c.id}')">
-        <div class="ck ${d?'ok':''}">
-          ${d?`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`:''}
-        </div>
-        <div class="ci-body">
-          <div class="ci-name">${c.name}</div>
-          <div class="ci-sub">${c.id}${d?' · '+d.by+' '+d.time:''}</div>
-        </div>
-        ${c.note?`<span class="badge ba">${c.note}</span>`:''}
-        <span class="badge ${d?'bg':'br'}">${d?'已抄':'未抄'}</span>
-      </div>`;
-    });
-  });
-  document.getElementById('list-out').innerHTML=html;
-}
-
-function renderAll(){renderOverview();renderList();}
-
-function openModal(id){
-  const c=clients[id];if(!c)return;
-  const isReadonly=!isCurrentMonth();
-  const done=getDone();const info=done[id];
-  pendingId=id;
-  document.getElementById('m-name').textContent=c.name;
-  const minfo=MONTHS.find(m=>m.key===viewMonth);
-  const mlabel=isCurrentMonth()?'本月':minfo?`${minfo.year}年${minfo.month}月`:'';
-  document.getElementById('m-meta').innerHTML=
-    `${c.id} ｜ ${c.area} ｜ ${c.person}`+
-    (c.note?` ｜ <span style="color:var(--amber);font-weight:600">${c.note}抄表</span>`:'')+
-    (!isCurrentMonth()?`<br><span style="color:var(--amber)">📋 ${mlabel} 查看模式（唯讀）</span>`:'')+ 
-    (info?`<br><span class="done-info">✅ ${info.by} 抄表於 ${info.time}</span>`:'');
-  document.getElementById('m-confirm').style.display=isReadonly?'none':'';
-  document.getElementById('m-undo').style.display=(info&&!isReadonly)?'block':'none';
-  document.getElementById('m-confirm').textContent=info?'重新確認':'✓ 確認已抄表';
-  document.getElementById('ov').classList.add('on');
-}
-
-function closeModal(){document.getElementById('ov').classList.remove('on');pendingId=null;}
-
-async function confirmModal(){
-  if(!pendingId||!isCurrentMonth())return;
-  if(!myName){closeModal();showPicker();return;}
-  const c=clients[pendingId];
-  const ts=nowTs();
-  if(!doneCache[TODAY_MKEY])doneCache[TODAY_MKEY]={};
-  doneCache[TODAY_MKEY][pendingId]={by:myName,time:ts};
-  renderAll();closeModal();stopScan();
-  setSyncState('spin','同步中…');
-  await apiCall({action:'markDone',id:pendingId,name:c.name,area:c.area,by:myName,month:TODAY_MKEY});
-  setSyncState('ok',nowTs().split(' ')[1]+' 已同步');
-}
-
-async function undoModal(){
-  if(!pendingId||!isCurrentMonth())return;
-  if(doneCache[TODAY_MKEY])delete doneCache[TODAY_MKEY][pendingId];
-  renderAll();closeModal();
-  setSyncState('spin','同步中…');
-  await apiCall({action:'unmark',id:pendingId,month:TODAY_MKEY});
-  setSyncState('ok','已同步');
-}
-
-function showPicker(){
-  document.getElementById('eng-list').innerHTML=ENGINEERS.filter(n=>n.trim()).map(n=>
-    `<button class="eng-btn" onclick="selectName('${n}')"><div class="eng-icon">👤</div>${n}</button>`
-  ).join('');
-  document.getElementById('picker').classList.add('on');
-}
-
-function selectName(n){
-  myName=n;localStorage.setItem(LSKEY,n);
-  document.getElementById('name-pill').textContent=n;
-  document.getElementById('picker').classList.remove('on');
-}
-
-function switchView(n){
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
-  document.getElementById('v'+n).classList.add('on');
-  document.querySelectorAll('.nb').forEach(b=>{b.classList.remove('on');if(b.dataset.v===n)b.classList.add('on');});
-  if(n!=='3')stopScan();
-  // Update scan tab note
-  if(n==='3'){
-    const t=new Date();
-    document.getElementById('scan-month-note').textContent=
-      `📅 掃描將記錄到：${t.getFullYear()}年${t.getMonth()+1}月（當月）`;
-  }
-}
-
-function resetMonth(){
-  if(!confirm('確定清除本月所有抄表記錄？\n此操作不會刪除雲端 Sheet 資料，請手動到 Google Sheet 刪除本月資料列。'))return;
-  doneCache[TODAY_MKEY]={};renderAll();
-}
-
-// QR Scanner - hybrid: native BarcodeDetector + jsQR fallback
-let nativeDetector=null;
-let scanAttempts=0;
-let videoStream=null;
-
-async function startScan(){
-  if(!navigator.mediaDevices?.getUserMedia){document.getElementById('smsg').textContent='⚠️ 無法取得相機，請用手動輸入';return;}
-  document.getElementById('vid-wrap').style.display='block';
-  document.getElementById('btn-scan').style.display='none';
-  document.getElementById('btn-stop').style.display='block';
-  document.getElementById('smsg').textContent='相機啟動中…';
-  scanAttempts=0;
-  // Try native BarcodeDetector (iOS 17+, Android Chrome)
-  if('BarcodeDetector' in window){
-    try{
-      const formats=await BarcodeDetector.getSupportedFormats();
-      if(formats.includes('qr_code')){
-        nativeDetector=new BarcodeDetector({formats:['qr_code']});
-      }
-    }catch(e){nativeDetector=null;}
-  }
-  try{
-    // High-resolution back camera with continuous focus
-    videoStream=await navigator.mediaDevices.getUserMedia({
-      video:{
-        facingMode:{ideal:'environment'},
-        width:{ideal:1920},
-        height:{ideal:1080},
-        focusMode:'continuous',
-        advanced:[{focusMode:'continuous'}]
-      },
-      audio:false
-    });
-    const v=document.getElementById('qr-vid');
-    v.srcObject=videoStream;
-    await v.play();
-    scanActive=true;
-    document.getElementById('smsg').textContent=
-      (nativeDetector?'🚀 原生掃描器':'掃描中')+'｜將 QR 對準綠框';
-    requestAnimationFrame(scanFrame);
-  }catch(e){
-    document.getElementById('smsg').textContent='⚠️ 相機錯誤：'+e.message;
-    stopScan();
-  }
-}
-
-async function scanFrame(){
-  if(!scanActive)return;
-  const v=document.getElementById('qr-vid'),cv=document.getElementById('qr-cv');
-  if(v.readyState===v.HAVE_ENOUGH_DATA){
-    let detected=null;
-    // Try native first (much faster + more accurate)
-    if(nativeDetector){
-      try{
-        const codes=await nativeDetector.detect(v);
-        if(codes&&codes.length>0)detected=codes[0].rawValue;
-      }catch(e){}
-    }
-    // Fallback: jsQR with both inversion attempts
-    if(!detected&&window.jsQR){
-      cv.width=v.videoWidth;cv.height=v.videoHeight;
-      const ctx=cv.getContext('2d',{willReadFrequently:true});
-      ctx.drawImage(v,0,0);
-      const img=ctx.getImageData(0,0,cv.width,cv.height);
-      const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-      if(code?.data)detected=code.data;
-    }
-    if(detected){
-      const raw=detected.trim();
-      const id=raw.toUpperCase();
-      if(clients[id]){
-        if(viewMonth!==TODAY_MKEY){viewMonth=TODAY_MKEY;buildMonthBar();}
-        scanActive=false;
-        document.getElementById('smsg').textContent='✅ 找到：'+clients[id].name;
-        if(navigator.vibrate)navigator.vibrate(100);
-        openModal(id);return;
-      }else{
-        // QR detected but not matching - show what was scanned
-        document.getElementById('smsg').textContent=`⚠️ 掃到「${raw}」但不在客戶清單中`;
-        scanActive=false;
-        setTimeout(()=>{if(document.getElementById('btn-stop').style.display==='block'){scanActive=true;requestAnimationFrame(scanFrame);}},2000);
-        return;
-      }
-    }
-    scanAttempts++;
-    if(scanAttempts%30===0){
-      document.getElementById('smsg').textContent=
-        (nativeDetector?'🚀 原生掃描器':'掃描中')+`｜已嘗試 ${scanAttempts} 次…若掃不到請按「停止掃描」改用手動輸入`;
-    }
-  }
-  scanRaf=requestAnimationFrame(scanFrame);
-}
-
-function stopScan(){
-  scanActive=false;if(scanRaf)cancelAnimationFrame(scanRaf);
-  const v=document.getElementById('qr-vid');
-  if(v.srcObject)v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;
-  document.getElementById('vid-wrap').style.display='none';
-  document.getElementById('btn-scan').style.display='flex';
-  document.getElementById('btn-stop').style.display='none';
-  document.getElementById('smsg').textContent='';
-}
-
-// Events
-document.getElementById('btn-scan').onclick=startScan;
-document.getElementById('btn-stop').onclick=stopScan;
-document.getElementById('m-cancel').onclick=closeModal;
-document.getElementById('m-confirm').onclick=confirmModal;
-document.getElementById('m-undo').onclick=undoModal;
-document.getElementById('search').oninput=renderList;
-document.getElementById('btn-man').onclick=()=>{
-  const v=document.getElementById('man-in').value.trim().toUpperCase();
-  if(clients[v]){
-    if(viewMonth!==TODAY_MKEY){viewMonth=TODAY_MKEY;buildMonthBar();}
-    openModal(v);
-  }else alert('找不到：'+v);
+/* ── 色盤 ── */
+const C = {
+  bg:"#eef1f5", navy:"#1b3a5c", accent:"#2f7d5d", light:"#ffffff",
+  text:"#22303f", muted:"#7c8a99", danger:"#c0392b", success:"#2f7d5d",
+  blue:"#2c6fa8", blueBg:"#eaf2fa", warn:"#c77f2a", warnBg:"#fdf4e6",
+  line:"#dde3ea", grey:"#93a1b0"
 };
-document.getElementById('man-in').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn-man').click();});
-document.querySelectorAll('.nb').forEach(b=>b.onclick=()=>switchView(b.dataset.v));
 
-// Init
-if(myName)document.getElementById('name-pill').textContent=myName;
-const t=new Date();
-document.getElementById('scan-month-note').textContent=`📅 掃描將記錄到：${t.getFullYear()}年${t.getMonth()+1}月（當月）`;
-buildMonthBar();
-buildFilters();
-loadCloud();
-setInterval(loadCloud,60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadCloud();});
-if(!myName)setTimeout(showPicker,600);
+/* ── 樣式積木 ── */
+const btnS = (v="primary", ex={}) => {
+  const base = {padding:"11px 16px", borderRadius:8, fontSize:15, fontWeight:600,
+                color:"#fff", background:C.navy, lineHeight:1.2};
+  const m = {primary:{background:C.navy}, accent:{background:C.accent},
+             red:{background:C.danger}, warn:{background:C.warn},
+             light:{background:"#fff", color:C.text, border:"1px solid "+C.line},
+             ghost:{background:"transparent", color:C.blue, padding:"8px 4px"}};
+  return {...base, ...(m[v]||{}), ...ex};
+};
+const inp = (ex={}) => ({padding:"10px 12px", borderRadius:8, border:"1px solid "+C.line,
+                         fontSize:15, background:"#fff", color:C.text, width:"100%", ...ex});
+const lbl = {fontSize:11, color:C.muted, letterSpacing:.5, marginBottom:4, display:"block"};
+const card = (ex={}) => ({background:"#fff", borderRadius:10, padding:14,
+                          border:"1px solid "+C.line, ...ex});
+
+/* ── localStorage 安全包裝 ── */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+};
+
+/* ── 日期工具 ── */
+const pad = n => String(n).padStart(2,"0");
+const monthKey = d => d.getFullYear()+"-"+pad(d.getMonth()+1);
+const parseTS = s => {
+  if(!s) return null;
+  const d = new Date(String(s).replace(/-/g,"/"));
+  return isNaN(d) ? null : d;
+};
+const fmtShort = s => {
+  const d = parseTS(s); if(!d) return "";
+  return (d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+};
+/** 相差幾個月（含小數，用天數換算） */
+const monthsAgo = s => {
+  const d = parseTS(s); if(!d) return 999;
+  return (Date.now() - d.getTime()) / 86400000 / 30;
+};
+
+/* ── API ── */
+async function api(action, body={}){
+  const r = await fetch(API_URL, {method:"POST", body:JSON.stringify({action, ...body})});
+  const t = await r.text();
+  try { return JSON.parse(t); }
+  catch(e){ return {ok:false, error:"回應格式錯誤："+t.slice(0,120)}; }
+}
+
+/* ── 照片壓縮 + 時間浮水印 ── */
+function processPhoto(file, caption){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error("讀取照片失敗"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej(new Error("照片格式無法解析"));
+      img.onload = () => {
+        const MAX = 1080;
+        let {width:w, height:h} = img;
+        const s = Math.min(1, MAX/Math.max(w,h));
+        w = Math.round(w*s); h = Math.round(h*s);
+
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        const cx = cv.getContext("2d");
+        cx.drawImage(img, 0, 0, w, h);
+
+        // 浮水印
+        const fs = Math.max(14, Math.round(w/32));
+        cx.font = "bold "+fs+"px sans-serif";
+        cx.textAlign = "right"; cx.textBaseline = "bottom";
+        cx.lineWidth = Math.max(2, fs/6);
+        cx.strokeStyle = "rgba(0,0,0,.75)";
+        cx.fillStyle = "#fff";
+        const lines = caption.split("\n");
+        lines.forEach((ln, i) => {
+          const y = h - 10 - (lines.length-1-i)*(fs*1.25);
+          cx.strokeText(ln, w-12, y);
+          cx.fillText(ln, w-12, y);
+        });
+
+        // 自適應品質：一路降到 350KB 以下為止（雜訊多的照片才會用到後面幾段）
+        const LIMIT = 350 * 1024;
+        let url = "";
+        for (const q of [0.72, 0.6, 0.5, 0.42, 0.35]){
+          url = cv.toDataURL("image/jpeg", q);
+          if (url.length * 0.75 <= LIMIT) break;
+        }
+        res({base64:url.split(",")[1], preview:url, kb:Math.round(url.length*0.75/1024)});
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ── QR 向量圖 ── */
+function QRSvg({text, size}){
+  const d = useMemo(() => {
+    if(!window.qrcode) return null;
+    try{
+      const q = window.qrcode(0, "M");
+      q.addData(String(text));
+      q.make();
+      const n = q.getModuleCount();
+      let path = "";
+      for(let r = 0; r < n; r++)
+        for(let c = 0; c < n; c++)
+          if(q.isDark(r, c)) path += "M"+c+" "+r+"h1v1h-1z";
+      return {n, path};
+    }catch(e){ return null; }
+  }, [text]);
+
+  if(!d) return <div style={{width:size, height:size, background:"#eee"}}/>;
+  return (
+    <svg viewBox={"0 0 "+d.n+" "+d.n} width={size} height={size}
+         shapeRendering="crispEdges" style={{display:"block"}}>
+      <rect width={d.n} height={d.n} fill="#fff"/>
+      <path d={d.path} fill="#000"/>
+    </svg>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   QR 掃描
+   ══════════════════════════════════════════════════════════ */
+function Scanner({onHit, onClose}){
+  const vRef = useRef(null), cRef = useRef(null);
+  const [err, setErr] = useState("");
+  const stop = useRef(false);
+
+  useEffect(() => {
+    let stream, raf, det;
+    stop.current = false;
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video:{facingMode:{ideal:"environment"}}
+        });
+        const v = vRef.current;
+        if(!v) return;
+        v.srcObject = stream;
+        v.setAttribute("playsinline","true");
+        await v.play();
+
+        if("BarcodeDetector" in window){
+          try { det = new window.BarcodeDetector({formats:["qr_code"]}); } catch(e){ det = null; }
+        }
+
+        const tick = async () => {
+          if(stop.current) return;
+          if(v.readyState === v.HAVE_ENOUGH_DATA){
+            let code = null;
+            if(det){
+              try {
+                const r = await det.detect(v);
+                if(r && r.length) code = r[0].rawValue;
+              } catch(e){ det = null; }
+            }
+            if(!code && window.jsQR){
+              const cv = cRef.current;
+              cv.width = v.videoWidth; cv.height = v.videoHeight;
+              const cx = cv.getContext("2d", {willReadFrequently:true});
+              cx.drawImage(v, 0, 0, cv.width, cv.height);
+              const d = cx.getImageData(0, 0, cv.width, cv.height);
+              const q = window.jsQR(d.data, d.width, d.height);
+              if(q) code = q.data;
+            }
+            if(code){
+              stop.current = true;
+              if(navigator.vibrate) navigator.vibrate(60);
+              onHit(String(code).trim());
+              return;
+            }
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } catch(e){
+        setErr("無法開啟相機：" + e.message + "（請確認網址是 https 並允許相機權限）");
+      }
+    })();
+
+    return () => {
+      stop.current = true;
+      if(raf) cancelAnimationFrame(raf);
+      if(stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, [onHit]);
+
+  return (
+    <div style={{position:"fixed", inset:0, background:"#000", zIndex:90,
+                 display:"flex", flexDirection:"column"}}>
+      <div style={{padding:"12px 14px", color:"#fff", display:"flex",
+                   justifyContent:"space-between", alignItems:"center"}}>
+        <b style={{fontSize:16}}>掃描客戶 QR</b>
+        <button onClick={onClose} style={btnS("light",{padding:"7px 14px"})}>關閉</button>
+      </div>
+      <div style={{flex:1, position:"relative", overflow:"hidden"}}>
+        <video ref={vRef} style={{width:"100%", height:"100%", objectFit:"cover"}} muted/>
+        <canvas ref={cRef} style={{display:"none"}}/>
+        <div style={{position:"absolute", top:"50%", left:"50%",
+                     transform:"translate(-50%,-50%)", width:"66%", aspectRatio:"1",
+                     border:"3px solid rgba(255,255,255,.9)", borderRadius:16}}/>
+      </div>
+      <div style={{padding:14, color:"#fff", fontSize:13, textAlign:"center", minHeight:52}}>
+        {err || "把服務編號的 QR 對準框內"}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   主程式
+   ══════════════════════════════════════════════════════════ */
+function App(){
+  const [page, setPage]     = useState("home");
+  const [month, setMonth]   = useState(monthKey(new Date()));
+  const [data, setData]     = useState(null);
+  const [busy, setBusy]     = useState(true);
+  const [msg, setMsg]       = useState("");
+  const [user, setUser]     = useState(LS.get("hz_user",""));
+  const [cur, setCur]       = useState(null);      // 目前開啟的客戶 id
+  const [scan, setScan]     = useState(false);
+  const [pin, setPin]       = useState(LS.get("hz_pin",""));
+  const [prev, setPrev]     = useState("home");   // 進清潔頁前停在哪一頁
+  const [labelSel, setLabelSel] = useState([]);   // 預先勾好的標籤客戶
+
+  // 清單篩選
+  const [fOwner, setFOwner] = useState("全部");
+  const [fDist, setFDist]   = useState("全部");
+  const [fStat, setFStat]   = useState("全部");
+  const [kw, setKw]         = useState("");
+
+  const toast = (t, ms=2600) => { setMsg(t); setTimeout(() => setMsg(""), ms); };
+
+  const load = useCallback(async (mk) => {
+    setBusy(true);
+    try {
+      const r = await fetch(API_URL + "?action=bootstrap&month=" + mk);
+      const j = await r.json();
+      if(!j.ok) throw new Error(j.error || "讀取失敗");
+      setData(j);
+    } catch(e){
+      toast("連線失敗：" + e.message, 6000);
+    }
+    setBusy(false);
+  }, []);
+
+  useEffect(() => { load(month); }, [month, load]);
+
+  const clients = data ? data.clients : [];
+  const byId = useMemo(() => {
+    const m = {}; clients.forEach(c => m[c.id] = c); return m;
+  }, [clients]);
+
+  const owners = useMemo(() => {
+    const s = new Set(clients.map(c => c.owner).filter(Boolean));
+    return Array.from(s);
+  }, [clients]);
+
+  const dists = useMemo(() => {
+    const s = new Set(clients.filter(c => fOwner === "全部" || c.owner === fOwner)
+                             .map(c => c.dist).filter(Boolean));
+    return Array.from(s).sort();
+  }, [clients, fOwner]);
+
+  /* ── 冷卻判斷 ── */
+  const coolInfo = useCallback((id) => {
+    const cool = data?.config?.cool ?? 3;
+    const last = data?.lastClean?.[id];
+    if(!last || !last.time) return {ok:true, never:true, cool};
+    const ago = monthsAgo(last.time);
+    if(ago >= cool) return {ok:true, last, ago, cool};
+    return {ok:false, last, ago, cool, left:Math.max(1, Math.ceil(cool - ago))};
+  }, [data]);
+
+  /* ── 統計 ── */
+  const stats = useMemo(() => {
+    if(!data) return null;
+    const goal = data.config?.goal ?? 20;
+    const o = {};
+    clients.forEach(c => {
+      const k = c.owner || "未指定";
+      o[k] = o[k] || {total:0, done:0, pass:0, wait:0, reject:0, goal};
+      o[k].total++;
+      if(data.meter[c.id]) o[k].done++;
+      const cl = data.clean[c.id];
+      if(cl){
+        if(cl.status === "已通過") o[k].pass++;
+        else if(cl.status === "退回") o[k].reject++;
+        else o[k].wait++;
+      }
+    });
+    return o;
+  }, [data, clients]);
+
+  /* ── 篩選後清單 ── */
+  const listed = useMemo(() => {
+    const k = kw.trim();
+    return clients.filter(c => {
+      if(fOwner !== "全部" && c.owner !== fOwner) return false;
+      if(fDist  !== "全部" && c.dist  !== fDist)  return false;
+      if(k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      if(fStat === "未抄表" && data?.meter[c.id]) return false;
+      if(fStat === "已抄表" && !data?.meter[c.id]) return false;
+      if(fStat === "可清潔" && !coolInfo(c.id).ok) return false;
+      if(fStat === "本月已清潔" && !data?.clean[c.id]) return false;
+      return true;
+    });
+  }, [clients, fOwner, fDist, fStat, kw, data, coolInfo]);
+
+  /* ── 動作 ── */
+  async function toggleMeter(c){
+    const on = !data.meter[c.id];
+    setBusy(true);
+    const r = await api("meterToggle", {month, id:c.id, owner:c.owner, user, on});
+    setBusy(false);
+    if(!r.ok) return toast("失敗：" + r.error, 5000);
+    setData(d => {
+      const m = {...d.meter};
+      if(on) m[c.id] = {time:r.time, by:user}; else delete m[c.id];
+      return {...d, meter:m};
+    });
+    toast(on ? "已標記抄表 ✓" : "已取消抄表");
+  }
+
+  /* ── 版面積木 ── */
+  const Head = ({title, back}) => (
+    <div style={{background:C.navy, color:"#fff", padding:"14px 16px",
+                 display:"flex", alignItems:"center", gap:10, position:"sticky",
+                 top:0, zIndex:20}}>
+      {back && <button onClick={back} style={btnS("light",{padding:"6px 12px", fontSize:14})}>←</button>}
+      <b style={{fontSize:17}}>{title}</b>
+      {busy && <span className="sp" style={{marginLeft:"auto", fontSize:15}}>◌</span>}
+    </div>
+  );
+
+  const Bar = ({v, max, color}) => (
+    <div style={{height:8, background:"#e6ebf1", borderRadius:99, overflow:"hidden"}}>
+      <div style={{height:"100%", width:Math.min(100, max ? v/max*100 : 0)+"%",
+                   background:color, borderRadius:99, transition:"width .3s"}}/>
+    </div>
+  );
+
+  /* ── 雲端照片（載入失敗時退回連結） ── */
+  function Photo({id, link, w}){
+    const [bad, setBad] = useState(false);
+    if(bad) return (
+      <a href={link || ("https://drive.google.com/file/d/"+id+"/view")}
+         target="_blank" rel="noreferrer"
+         style={{...card({background:C.blueBg, borderColor:"#c5daed",
+                          display:"block", textAlign:"center"}),
+                 color:C.blue, fontSize:14, textDecoration:"none"}}>
+        照片無法直接預覽，點此在雲端硬碟開啟 ↗
+      </a>
+    );
+    return (
+      <img src={"https://drive.google.com/thumbnail?id="+id+"&sz=w"+w}
+           alt="清潔照片" onError={() => setBad(true)}
+           style={{width:"100%", borderRadius:8, border:"1px solid "+C.line,
+                   background:"#f4f6f9"}}/>
+    );
+  }
+
+  /* ══════ 客戶詳情 ══════ */
+  function Detail({id}){
+    const c = byId[id];
+    if(!c) return (
+      <div>
+        <Head title="找不到客戶" back={() => setCur(null)}/>
+        <div style={{padding:16}}>
+          <div style={card()}>
+            編號 <b>{id}</b> 不在客戶主檔中。<br/>
+            <span style={{color:C.muted, fontSize:13}}>
+              請確認 QR 是否為舊版，或這間客戶尚未建檔。
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+
+    const m  = data.meter[c.id];
+    const cl = data.clean[c.id];
+    const ci = coolInfo(c.id);
+
+    const stColor = {"已通過":C.success, "待審核":C.warn, "退回":C.danger}[cl?.status] || C.muted;
+
+    return (
+      <div>
+        <Head title={c.id} back={() => setCur(null)}/>
+        <div style={{padding:14, display:"grid", gap:12}}>
+
+          <div style={card()}>
+            <div style={{fontSize:22, fontWeight:700, marginBottom:6}}>{c.name}</div>
+            <div style={{color:C.muted, fontSize:14}}>{c.owner}　·　{c.dist}</div>
+            <div style={{display:"flex", gap:8, marginTop:12}}>
+              <button onClick={() => setPage("editClient")}
+                      style={btnS("light",{fontSize:13, padding:"8px 14px"})}>編輯資料</button>
+              <button onClick={() => {setLabelSel([c.id]); setPage("labels");}}
+                      style={btnS("light",{fontSize:13, padding:"8px 14px"})}>列印 QR 標籤</button>
+            </div>
+            {c.memo && (
+              <div style={{marginTop:10, padding:"9px 11px", background:C.warnBg,
+                           border:"1px solid #f0dcb8", borderRadius:8, fontSize:14,
+                           lineHeight:1.6}}>
+                {c.memo}
+              </div>
+            )}
+          </div>
+
+          {/* 抄表 */}
+          <div style={card()}>
+            <span style={lbl}>本月抄表　{month}</span>
+            {m ? (
+              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12}}>
+                <span style={{fontSize:19, fontWeight:700, color:C.success}}>✓ 已抄表</span>
+                <span style={{color:C.muted, fontSize:13}}>
+                  {fmtShort(m.time)}{m.by ? "　"+m.by : ""}
+                </span>
+              </div>
+            ) : (
+              <div style={{fontSize:19, fontWeight:700, color:C.muted, marginBottom:12}}>
+                尚未抄表
+              </div>
+            )}
+            <button onClick={() => toggleMeter(c)} disabled={busy}
+                    style={btnS(m ? "light" : "accent", {width:"100%", padding:"14px"})}>
+              {m ? "取消抄表標記" : "標記為已抄表"}
+            </button>
+          </div>
+
+          {/* 清潔 */}
+          <div style={card()}>
+            <span style={lbl}>深度清潔</span>
+            <div style={{fontSize:13, color:C.muted, marginBottom:10, lineHeight:1.7}}>
+              {ci.never ? "從未清潔紀錄" :
+                <>上次清潔：{parseTS(ci.last.time) ?
+                    parseTS(ci.last.time).toLocaleDateString("zh-TW") : ci.last.time}
+                 　({Math.floor(ci.ago)} 個月前{ci.last.by ? "，"+ci.last.by : ""})</>}
+            </div>
+
+            {cl ? (
+              <div>
+                <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
+                  <span style={{fontSize:18, fontWeight:700, color:stColor}}>
+                    本月：{cl.status}
+                  </span>
+                  <span style={{color:C.muted, fontSize:13}}>{fmtShort(cl.time)}</span>
+                </div>
+                {cl.photo && <Photo id={cl.photo} link={cl.link} w={600}/>}
+                {cl.status === "退回" && (
+                  <div style={{marginTop:10, padding:10, background:"#fdecea",
+                               border:"1px solid #f5c6c0", borderRadius:8, fontSize:14}}>
+                    <b>退回原因：</b>{cl.reason || "（未填）"}
+                    <div style={{marginTop:8}}>
+                      <button onClick={() => {setPrev(page); setPage("clean");}}
+                              style={btnS("warn",{width:"100%"})}>重新拍照上傳</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : ci.ok ? (
+              <button onClick={() => {setPrev(page); setPage("clean");}}
+                      style={btnS("primary",{width:"100%", padding:"14px"})}>
+                拍照申報清潔
+              </button>
+            ) : (
+              <button disabled
+                      style={btnS("light",{width:"100%", padding:"14px",
+                                           color:C.grey, cursor:"not-allowed"})}>
+                冷卻中 · 還要約 {ci.left} 個月
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 清潔上傳 ══════ */
+  function CleanUp({id}){
+    const c = byId[id];
+    const [ph, setPh]   = useState(null);
+    const [up, setUp]   = useState(false);
+    const [er, setEr]   = useState("");
+
+    async function pick(e){
+      const f = e.target.files && e.target.files[0];
+      if(!f) return;
+      setEr("");
+      try {
+        const cap = c.name + "\n" + new Date().toLocaleString("zh-TW",{hour12:false});
+        setPh(await processPhoto(f, cap));
+      } catch(err){ setEr(err.message); }
+    }
+
+    async function send(){
+      if(!ph) return;
+      if(!user) return setEr("請先在首頁選擇操作人員");
+      setUp(true); setEr("");
+      const r = await api("cleanSubmit", {
+        month, id:c.id, owner:c.owner, name:c.name,
+        photo:ph.base64, mime:"image/jpeg"
+      });
+      setUp(false);
+      if(!r.ok) return setEr(r.error);
+      setData(d => ({...d, clean:{...d.clean,
+        [c.id]:{time:r.time, photo:r.photo, link:r.link, status:"待審核", by:c.owner}}}));
+      setPage(prev); setCur(c.id);
+      toast("已送出，等待主管審核");
+    }
+
+    return (
+      <div>
+        <Head title="深度清潔申報" back={() => setPage(prev)}/>
+        <div style={{padding:14, display:"grid", gap:12}}>
+          <div style={card()}>
+            <div style={{fontSize:19, fontWeight:700}}>{c.name}</div>
+            <div style={{color:C.muted, fontSize:13, marginTop:4}}>
+              {c.id}　·　{c.dist}　·　{c.owner}
+            </div>
+          </div>
+
+          <div style={card()}>
+            <span style={lbl}>清潔後照片（機器內部保養）</span>
+            <div style={{fontSize:13, color:C.muted, lineHeight:1.7, marginBottom:12}}>
+              請拍攝<b>清潔完成後的機器內部</b>，需看得出實際保養部位。
+              照片會自動壓上客戶名稱與拍攝時間。
+            </div>
+
+            {ph ? (
+              <div>
+                <img src={ph.preview} alt="預覽"
+                     style={{width:"100%", borderRadius:8, border:"1px solid "+C.line}}/>
+                <div style={{fontSize:12, color:C.muted, margin:"8px 0"}}>
+                  壓縮後約 {ph.kb} KB
+                </div>
+                <label style={{...btnS("light"), display:"block", textAlign:"center"}}>
+                  重新拍照
+                  <input type="file" accept="image/*" capture="environment"
+                         onChange={pick} style={{display:"none"}}/>
+                </label>
+              </div>
+            ) : (
+              <label style={{...btnS("primary",{padding:"36px 16px", fontSize:17}),
+                             display:"block", textAlign:"center"}}>
+                📷　開啟相機拍照
+                <input type="file" accept="image/*" capture="environment"
+                       onChange={pick} style={{display:"none"}}/>
+              </label>
+            )}
+          </div>
+
+          {er && (
+            <div style={{...card({background:"#fdecea", borderColor:"#f5c6c0"}),
+                         color:C.danger, fontSize:14}}>{er}</div>
+          )}
+
+          <button onClick={send} disabled={!ph || up}
+                  style={btnS("accent",{width:"100%", padding:"16px", fontSize:17,
+                                        opacity:(!ph||up)?.45:1})}>
+            {up ? "上傳中…" : "送出申報"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 主管審核 ══════ */
+  function Review(){
+    const [p, setP]     = useState(pin);
+    const [ok, setOk]   = useState(!!pin);
+    const [why, setWhy] = useState({});
+    const [work, setWork] = useState("");
+
+    const pend = clients
+      .filter(c => data.clean[c.id] && data.clean[c.id].status === "待審核")
+      .sort((a,b) => (data.clean[a.id].time > data.clean[b.id].time ? 1 : -1));
+
+    async function judge(c, pass){
+      setWork(c.id);
+      const r = await api("review", {
+        month, id:c.id, pin:p, result:pass ? "pass" : "reject",
+        reason: pass ? "" : (why[c.id]||""), reviewer:"主管"
+      });
+      setWork("");
+      if(!r.ok) return toast("失敗：" + r.error, 5000);
+      LS.set("hz_pin", p); setPin(p);
+      setData(d => ({...d, clean:{...d.clean,
+        [c.id]:{...d.clean[c.id], status:r.status}}}));
+      toast(pass ? "已通過 ✓" : "已退回");
+    }
+
+    if(!ok) return (
+      <div>
+        <Head title="主管審核" back={() => setPage("home")}/>
+        <div style={{padding:16}}>
+          <div style={card()}>
+            <span style={lbl}>請輸入主管密碼</span>
+            <input type="password" value={p} onChange={e => setP(e.target.value)}
+                   style={inp({marginBottom:12})} inputMode="numeric"/>
+            <button onClick={() => setOk(!!p)} style={btnS("primary",{width:"100%"})}>
+              進入
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <Head title={"待審核　"+pend.length+" 件"} back={() => setPage("home")}/>
+        <div style={{padding:14, display:"grid", gap:12}}>
+          {pend.length === 0 && (
+            <div style={{...card(), textAlign:"center", color:C.muted, padding:30}}>
+              目前沒有待審核的清潔紀錄
+            </div>
+          )}
+          {pend.map(c => {
+            const cl = data.clean[c.id];
+            return (
+              <div key={c.id} style={card()}>
+                <div style={{fontSize:18, fontWeight:700}}>{c.name}</div>
+                <div style={{color:C.muted, fontSize:13, margin:"4px 0 10px"}}>
+                  {c.id}　·　{c.dist}　·　{c.owner}　·　{fmtShort(cl.time)}
+                </div>
+                <Photo id={cl.photo} link={cl.link} w={800}/>
+                <a href={cl.link} target="_blank" rel="noreferrer"
+                   style={{...btnS("ghost"), display:"inline-block", fontSize:13}}>
+                  開啟原始照片 ↗
+                </a>
+                <input placeholder="退回原因（退回時必填）"
+                       value={why[c.id]||""}
+                       onChange={e => setWhy(w => ({...w, [c.id]:e.target.value}))}
+                       style={inp({margin:"8px 0 10px"})}/>
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+                  <button disabled={work===c.id} onClick={() => judge(c, true)}
+                          style={btnS("accent",{padding:"14px"})}>通過</button>
+                  <button disabled={work===c.id || !(why[c.id]||"").trim()}
+                          onClick={() => judge(c, false)}
+                          style={btnS("red",{padding:"14px",
+                            opacity:(why[c.id]||"").trim()?1:.4})}>退回</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 月結重置 ══════ */
+  function Admin(){
+    const [p, setP]   = useState(pin);
+    const [sc, setSc] = useState("meter");
+    const [w, setW]   = useState(false);
+
+    async function go(){
+      const names = {meter:"抄表紀錄", clean:"清潔紀錄", all:"抄表＋清潔紀錄"};
+      if(!confirm("確定清空 "+month+" 的"+names[sc]+"？此動作無法復原。")) return;
+      setW(true);
+      const r = await api("resetMonth", {month, scope:sc, pin:p});
+      setW(false);
+      if(!r.ok) return toast("失敗：" + r.error, 5000);
+      LS.set("hz_pin", p); setPin(p);
+      toast("已清除 "+r.removed+" 筆");
+      load(month);
+    }
+
+    return (
+      <div>
+        <Head title="月結重置" back={() => setPage("home")}/>
+        <div style={{padding:14, display:"grid", gap:12}}>
+          <div style={{...card({background:C.blueBg, borderColor:"#c5daed"}),
+                       fontSize:13, lineHeight:1.8}}>
+            系統<b>本來就是按月分開記錄</b>的，換月自動從零開始，
+            平常不需要用這頁。只有當本月資料建錯、要整批重來時才用。
+          </div>
+          <div style={card()}>
+            <span style={lbl}>目標月份</span>
+            <div style={{fontSize:20, fontWeight:700, marginBottom:14}}>{month}</div>
+
+            <span style={lbl}>清除範圍</span>
+            <select value={sc} onChange={e => setSc(e.target.value)} style={inp({marginBottom:14})}>
+              <option value="meter">只清抄表紀錄</option>
+              <option value="clean">只清清潔紀錄（照片保留在雲端硬碟）</option>
+              <option value="all">全部清除</option>
+            </select>
+
+            <span style={lbl}>主管密碼</span>
+            <input type="password" value={p} onChange={e => setP(e.target.value)}
+                   style={inp({marginBottom:14})} inputMode="numeric"/>
+
+            <button onClick={go} disabled={!p || w} style={btnS("red",{width:"100%", padding:"14px"})}>
+              {w ? "處理中…" : "確認清除"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  /* ══════ QR 標籤列印 ══════ */
+  function Labels(){
+    const [w, setW]     = useState(Number(LS.get("hz_lw", 35)));
+    const [h, setH]     = useState(Number(LS.get("hz_lh", 25)));
+    const [mode, setMode] = useState(LS.get("hz_lmode", "page"));  // page=標籤機 / a4=A4貼紙
+    const [showName, setShowName] = useState(LS.get("hz_lname","1") === "1");
+    const [sel, setSel] = useState(() => new Set(labelSel));
+    const [lo, setLo]   = useState("全部");
+    const [ld, setLd]   = useState("全部");
+    const [lk, setLk]   = useState("");
+
+    const pool = clients.filter(c => {
+      if(lo !== "全部" && c.owner !== lo) return false;
+      if(ld !== "全部" && c.dist  !== ld) return false;
+      const k = lk.trim();
+      if(k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      return true;
+    });
+    const poolDists = Array.from(new Set(
+      clients.filter(c => lo === "全部" || c.owner === lo).map(c => c.dist).filter(Boolean))).sort();
+
+    const flip = id => setSel(s => {
+      const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
+    });
+    const picked = clients.filter(c => sel.has(c.id));
+
+    // 版面：寬扁 → QR 左、文字右；接近正方 → QR 上、文字下
+    const pad  = Math.max(0.8, Math.min(w, h) * 0.06);
+    const side = w >= h * 1.25;
+    const qr   = side ? (h - pad*2) : Math.min(w - pad*2, h * 0.62);
+    const fId  = Math.max(1.8, (side ? h : h - qr) * 0.24);
+    const fNm  = fId * 0.82;
+
+    function doPrint(){
+      LS.set("hz_lw", w); LS.set("hz_lh", h);
+      LS.set("hz_lmode", mode); LS.set("hz_lname", showName ? "1" : "0");
+      const old = document.getElementById("pagerule");
+      if(old) old.remove();
+      const st = document.createElement("style");
+      st.id = "pagerule";
+      st.textContent = mode === "page"
+        ? "@media print{@page{size:" + w + "mm " + h + "mm;margin:0}}"
+        : "@media print{@page{size:A4;margin:8mm}}";
+      document.head.appendChild(st);
+      setTimeout(() => window.print(), 120);
+    }
+
+    const Label = ({c}) => (
+      <div className="lbl" style={{
+            width:w+"mm", height:h+"mm", padding:pad+"mm", boxSizing:"border-box",
+            display:"flex", flexDirection:side ? "row" : "column",
+            alignItems:"center", justifyContent:side ? "flex-start" : "center",
+            gap:pad+"mm", overflow:"hidden", background:"#fff",
+            border:mode === "a4" ? "0.2mm dashed #bbb" : "0"}}>
+        <QRSvg text={c.id} size={qr+"mm"}/>
+        <div style={{minWidth:0, flex:1, textAlign:side ? "left" : "center",
+                     lineHeight:1.15, overflow:"hidden"}}>
+          <div style={{fontSize:fId+"mm", fontWeight:700, letterSpacing:"-0.02em",
+                       whiteSpace:"nowrap"}}>{c.id}</div>
+          {showName && (
+            <div style={{fontSize:fNm+"mm", marginTop:pad*0.4+"mm",
+                         display:"-webkit-box", WebkitLineClamp:2,
+                         WebkitBoxOrient:"vertical", overflow:"hidden",
+                         wordBreak:"break-all"}}>{c.name}</div>
+          )}
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div className="noprint">
+          <Head title={"QR 標籤　已選 "+sel.size+" 張"} back={() => setPage("home")}/>
+        </div>
+
+        <div className="noprint" style={{padding:14, display:"grid", gap:12}}>
+          <div style={card()}>
+            <span style={lbl}>標籤尺寸（mm）</span>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
+              <div>
+                <span style={{...lbl, marginBottom:2}}>寬度</span>
+                <input type="number" value={w} min={15} max={210} step={1}
+                       onChange={e => setW(Math.max(10, Number(e.target.value)||10))}
+                       style={inp()} inputMode="decimal"/>
+              </div>
+              <div>
+                <span style={{...lbl, marginBottom:2}}>高度</span>
+                <input type="number" value={h} min={10} max={297} step={1}
+                       onChange={e => setH(Math.max(10, Number(e.target.value)||10))}
+                       style={inp()} inputMode="decimal"/>
+              </div>
+            </div>
+            <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:12}}>
+              {[[35,25],[40,30],[50,30],[30,20],[70,38]].map(([a,b]) => (
+                <button key={a+"x"+b} onClick={() => {setW(a); setH(b);}}
+                        style={btnS(w===a&&h===b ? "primary" : "light",
+                                    {padding:"6px 10px", fontSize:12})}>
+                  {a}×{b}
+                </button>
+              ))}
+            </div>
+
+            <span style={lbl}>輸出方式</span>
+            <select value={mode} onChange={e => setMode(e.target.value)} style={inp({marginBottom:12})}>
+              <option value="page">標籤機（一張標籤一頁）</option>
+              <option value="a4">A4 貼紙（整頁排版，虛線為裁切線）</option>
+            </select>
+
+            <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14}}>
+              <input type="checkbox" checked={showName}
+                     onChange={e => setShowName(e.target.checked)}
+                     style={{width:18, height:18}}/>
+              標籤上顯示客戶名稱
+            </label>
+          </div>
+
+          <div style={card()}>
+            <span style={lbl}>挑選客戶</span>
+            <input placeholder="搜尋客戶名稱或編號" value={lk}
+                   onChange={e => setLk(e.target.value)} style={inp({marginBottom:8})}/>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:10}}>
+              <select value={lo} onChange={e => {setLo(e.target.value); setLd("全部");}}
+                      style={inp({fontSize:13, padding:"8px"})}>
+                <option>全部</option>
+                {owners.map(o => <option key={o}>{o}</option>)}
+              </select>
+              <select value={ld} onChange={e => setLd(e.target.value)}
+                      style={inp({fontSize:13, padding:"8px"})}>
+                <option>全部</option>
+                {poolDists.map(d => <option key={d}>{d}</option>)}
+              </select>
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
+              <button onClick={() => setSel(s => {
+                        const n = new Set(s); pool.forEach(c => n.add(c.id)); return n;})}
+                      style={btnS("light",{fontSize:13})}>
+                全選這 {pool.length} 間
+              </button>
+              <button onClick={() => setSel(new Set())} style={btnS("light",{fontSize:13})}>
+                清空選取
+              </button>
+            </div>
+
+            <div style={{maxHeight:300, overflowY:"auto", border:"1px solid "+C.line,
+                         borderRadius:8}}>
+              {pool.map(c => (
+                <label key={c.id}
+                       style={{display:"flex", alignItems:"center", gap:10,
+                               padding:"9px 11px", borderBottom:"1px solid "+C.line,
+                               fontSize:14, cursor:"pointer",
+                               background:sel.has(c.id) ? C.blueBg : "#fff"}}>
+                  <input type="checkbox" checked={sel.has(c.id)}
+                         onChange={() => flip(c.id)} style={{width:18, height:18}}/>
+                  <span style={{fontFamily:"monospace", fontSize:12, color:C.muted}}>{c.id}</span>
+                  <span style={{whiteSpace:"nowrap", overflow:"hidden",
+                                textOverflow:"ellipsis"}}>{c.name}</span>
+                </label>
+              ))}
+              {pool.length === 0 &&
+                <div style={{padding:20, textAlign:"center", color:C.muted}}>沒有符合的客戶</div>}
+            </div>
+          </div>
+
+          <button onClick={doPrint} disabled={sel.size === 0}
+                  style={btnS("primary",{width:"100%", padding:"16px", fontSize:17,
+                                         opacity:sel.size ? 1 : .4})}>
+            列印 {sel.size} 張標籤
+          </button>
+
+          <div style={{...card({background:C.blueBg, borderColor:"#c5daed"}),
+                       fontSize:13, lineHeight:1.8}}>
+            列印對話框裡請把<b>邊界設為「無」</b>、<b>縮放設為 100%</b>，
+            並取消勾選頁首頁尾，尺寸才會準。QR 內容就是服務編號本身，
+            跟你 Excel 裡的公式產生的完全一樣，舊標籤不用換。
+          </div>
+
+          {picked.length > 0 && (
+            <div>
+              <span style={lbl}>預覽（實際列印尺寸）</span>
+              <div style={{background:"#fff", padding:10, borderRadius:8,
+                           border:"1px solid "+C.line, display:"flex",
+                           flexWrap:"wrap", gap:6, overflowX:"auto"}}>
+                {picked.slice(0,6).map(c => (
+                  <div key={c.id} style={{border:"1px dashed "+C.line}}>
+                    <Label c={c}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 實際送印的內容 */}
+        <div className={"lbl-sheet " + (mode === "page" ? "lbl-page" : "")}
+             style={{display:"none"}}>
+          {picked.map(c => <Label key={c.id} c={c}/>)}
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 新增 / 編輯客戶 ══════ */
+  function ClientForm({editId}){
+    const src = editId ? byId[editId] : null;
+    const [f, setF] = useState(src ? {...src} :
+      {id:"", owner:(user && user !== "其他") ? user : (owners[0] || ""), dist:"", name:"", memo:""});
+    const [w, setW]   = useState(false);
+    const [er, setEr] = useState("");
+
+    // 依負責人推算下一個可用編號
+    const suggest = useCallback((owner) => {
+      const pre = owner === "李哲倫" ? "HZ-L-" : owner === "林冠廷" ? "HZ-T-" : "";
+      if(!pre) return "";
+      const used = clients.filter(c => c.id.indexOf(pre) === 0)
+                          .map(c => parseInt(c.id.slice(pre.length), 10))
+                          .filter(n => !isNaN(n));
+      const next = used.length ? Math.max.apply(null, used) + 1 : 1;
+      return pre + String(next).padStart(3, "0");
+    }, [clients]);
+
+    useEffect(() => {
+      if(!editId && !f.id) setF(x => ({...x, id:suggest(x.owner)}));
+    }, [editId, f.owner, f.id, suggest]);
+
+    async function save(){
+      const id = f.id.trim().toUpperCase();
+      if(!id)        return setEr("請填服務編號");
+      if(!f.name.trim()) return setEr("請填客戶名稱");
+      if(!editId && byId[id]) return setEr("編號 " + id + " 已存在（" + byId[id].name + "）");
+      setW(true); setEr("");
+      const r = await api("saveClient", {client:{
+        id, owner:f.owner.trim(), dist:f.dist.trim(),
+        name:f.name.trim(), memo:f.memo.trim()}, oldId:editId || ""});
+      setW(false);
+      if(!r.ok) return setEr(r.error);
+      await load(month);
+      if(editId){ setPage("home"); setCur(id); toast("已更新客戶資料"); }
+      else { setLabelSel([id]); setPage("labels"); toast("已新增 " + id + "，可直接列印標籤"); }
+    }
+
+    const freeDists = Array.from(new Set(clients.map(c => c.dist).filter(Boolean))).sort();
+
+    return (
+      <div>
+        <Head title={editId ? "編輯客戶" : "新增客戶"}
+              back={() => {setPage(editId ? "home" : "home"); if(!editId) setCur(null);}}/>
+        <div style={{padding:14, display:"grid", gap:12}}>
+          <div style={card()}>
+            <span style={lbl}>負責人</span>
+            <select value={f.owner}
+                    onChange={e => setF({...f, owner:e.target.value,
+                                         id:editId ? f.id : suggest(e.target.value)})}
+                    style={inp({marginBottom:12})}>
+              {owners.map(o => <option key={o}>{o}</option>)}
+            </select>
+
+            <span style={lbl}>服務編號（QR 內容就是這一串）</span>
+            <input value={f.id} onChange={e => setF({...f, id:e.target.value})}
+                   style={inp({marginBottom:4, fontFamily:"monospace"})}
+                   placeholder="HZ-L-118"/>
+            <div style={{fontSize:12, color:C.muted, marginBottom:12}}>
+              系統已自動帶入下一個空號，可自行修改
+            </div>
+
+            <span style={lbl}>客戶名稱</span>
+            <input value={f.name} onChange={e => setF({...f, name:e.target.value})}
+                   style={inp({marginBottom:12})} placeholder="例：永慶1F"/>
+
+            <span style={lbl}>區域</span>
+            <input value={f.dist} onChange={e => setF({...f, dist:e.target.value})}
+                   list="distlist" style={inp({marginBottom:12})} placeholder="例：三民區"/>
+            <datalist id="distlist">
+              {freeDists.map(d => <option key={d} value={d}/>)}
+            </datalist>
+
+            <span style={lbl}>備註</span>
+            <textarea value={f.memo} onChange={e => setF({...f, memo:e.target.value})}
+                      rows={3} style={inp({resize:"vertical"})}
+                      placeholder="例：送帳單(收款)、25號"/>
+          </div>
+
+          {er && (
+            <div style={{...card({background:"#fdecea", borderColor:"#f5c6c0"}),
+                         color:C.danger, fontSize:14}}>{er}</div>
+          )}
+
+          <button onClick={save} disabled={w}
+                  style={btnS("accent",{width:"100%", padding:"16px", fontSize:17})}>
+            {w ? "儲存中…" : (editId ? "儲存變更" : "新增並產生標籤")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 客戶清單 ══════ */
+  function List(){
+    return (
+      <div>
+        <Head title={"客戶清單　"+listed.length+" 間"} back={() => setPage("home")}/>
+        <div style={{padding:"12px 14px", background:"#fff",
+                     borderBottom:"1px solid "+C.line, position:"sticky", top:52, zIndex:15}}>
+          <input placeholder="搜尋客戶名稱或編號" value={kw}
+                 onChange={e => setKw(e.target.value)} style={inp({marginBottom:8})}/>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6}}>
+            <select value={fOwner} onChange={e => {setFOwner(e.target.value); setFDist("全部");}}
+                    style={inp({fontSize:13, padding:"8px"})}>
+              <option>全部</option>
+              {owners.map(o => <option key={o}>{o}</option>)}
+            </select>
+            <select value={fDist} onChange={e => setFDist(e.target.value)}
+                    style={inp({fontSize:13, padding:"8px"})}>
+              <option>全部</option>
+              {dists.map(d => <option key={d}>{d}</option>)}
+            </select>
+            <select value={fStat} onChange={e => setFStat(e.target.value)}
+                    style={inp({fontSize:13, padding:"8px"})}>
+              <option>全部</option>
+              <option>未抄表</option>
+              <option>已抄表</option>
+              <option>可清潔</option>
+              <option>本月已清潔</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{padding:"10px 14px 30px", display:"grid", gap:8}}>
+          {listed.map(c => {
+            const m = data.meter[c.id], cl = data.clean[c.id], ci = coolInfo(c.id);
+            return (
+              <div key={c.id} onClick={() => setCur(c.id)}
+                   style={{...card({padding:"11px 13px", cursor:"pointer",
+                          borderLeft:"4px solid "+(m ? C.success : C.line)})}}>
+                <div style={{display:"flex", justifyContent:"space-between", gap:10}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:16, fontWeight:600, whiteSpace:"nowrap",
+                                 overflow:"hidden", textOverflow:"ellipsis"}}>
+                      {c.name}
+                    </div>
+                    <div style={{fontSize:12, color:C.muted, marginTop:3}}>
+                      {c.id}　·　{c.dist}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right", flexShrink:0, fontSize:12}}>
+                    <div style={{color:m ? C.success : C.grey, fontWeight:600}}>
+                      {m ? "已抄表" : "未抄表"}
+                    </div>
+                    <div style={{marginTop:3, color:cl ? C.blue : (ci.ok ? C.accent : C.grey)}}>
+                      {cl ? "清潔·"+cl.status : (ci.ok ? "可清潔" : "冷卻中")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {listed.length === 0 && (
+            <div style={{textAlign:"center", color:C.muted, padding:30}}>沒有符合的客戶</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 首頁 ══════ */
+  function Home(){
+    const monthOpts = [];
+    for(let i = 0; i < 12; i++){
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+      monthOpts.push(monthKey(d));
+    }
+    const totalUnread = clients.filter(c => !data.meter[c.id]).length;
+
+    return (
+      <div>
+        <div style={{background:C.navy, color:"#fff", padding:"16px 16px 20px"}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+            <b style={{fontSize:18}}>華芝　抄表暨清潔</b>
+            {busy && <span className="sp">◌</span>}
+          </div>
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:14}}>
+            <select value={month} onChange={e => setMonth(e.target.value)}
+                    style={inp({padding:"9px", fontSize:14})}>
+              {monthOpts.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <select value={user} onChange={e => {setUser(e.target.value); LS.set("hz_user", e.target.value);}}
+                    style={inp({padding:"9px", fontSize:14})}>
+              <option value="">選擇操作人員</option>
+              {owners.map(o => <option key={o}>{o}</option>)}
+              <option>其他</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{padding:14, display:"grid", gap:12, marginTop:-8}}>
+
+          <button onClick={() => setScan(true)}
+                  style={btnS("accent",{padding:"20px", fontSize:19, borderRadius:12,
+                                        boxShadow:"0 3px 10px rgba(47,125,93,.3)"})}>
+            掃描 QR 開始作業
+          </button>
+
+          {/* 抄表進度 */}
+          <div style={card()}>
+            <div style={{display:"flex", justifyContent:"space-between",
+                         alignItems:"baseline", marginBottom:12}}>
+              <b style={{fontSize:16}}>本月抄表進度</b>
+              <span onClick={() => {setFStat("未抄表"); setFOwner("全部");
+                                    setFDist("全部"); setKw(""); setPage("list");}}
+                    style={{color:C.danger, fontWeight:700, fontSize:15, cursor:"pointer"}}>
+                還有 {totalUnread} 間未抄 ›
+              </span>
+            </div>
+            {stats && Object.keys(stats).map(k => {
+              const s = stats[k];
+              return (
+                <div key={k} style={{marginBottom:12}}>
+                  <div style={{display:"flex", justifyContent:"space-between",
+                               fontSize:14, marginBottom:5}}>
+                    <span>{k}</span>
+                    <span style={{color:C.muted}}>
+                      <b style={{color:C.text, fontSize:16}}>{s.done}</b> / {s.total}
+                      <span style={{color:C.danger, marginLeft:8}}>未抄 {s.total-s.done}</span>
+                    </span>
+                  </div>
+                  <Bar v={s.done} max={s.total} color={C.success}/>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 清潔進度 */}
+          <div style={card()}>
+            <div style={{display:"flex", justifyContent:"space-between",
+                         alignItems:"baseline", marginBottom:12}}>
+              <b style={{fontSize:16}}>本月深度清潔</b>
+              <span style={{fontSize:12, color:C.muted}}>
+                每組目標 {data.config?.goal ?? 20} 間
+              </span>
+            </div>
+            {stats && Object.keys(stats).map(k => {
+              const s = stats[k];
+              return (
+                <div key={k} style={{marginBottom:12}}>
+                  <div style={{display:"flex", justifyContent:"space-between",
+                               fontSize:14, marginBottom:5}}>
+                    <span>{k}</span>
+                    <span style={{color:C.muted}}>
+                      通過 <b style={{color:C.success, fontSize:16}}>{s.pass}</b> / {s.goal}
+                      {s.wait > 0 && <span style={{color:C.warn, marginLeft:8}}>待審 {s.wait}</span>}
+                      {s.reject > 0 && <span style={{color:C.danger, marginLeft:8}}>退回 {s.reject}</span>}
+                    </span>
+                  </div>
+                  <Bar v={s.pass} max={s.goal} color={C.blue}/>
+                </div>
+              );
+            })}
+            <button onClick={() => {setFStat("可清潔"); setFOwner(user && user!=="其他" ? user : "全部");
+                                    setFDist("全部"); setKw(""); setPage("list");}}
+                    style={btnS("light",{width:"100%", marginTop:4})}>
+              查看可清潔名單（滿 {data.config?.cool ?? 3} 個月）
+            </button>
+          </div>
+
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+            <button onClick={() => {setLabelSel([]); setPage("labels");}}
+                    style={btnS("light",{padding:"14px"})}>QR 標籤列印</button>
+            <button onClick={() => {setCur(null); setPage("addClient");}}
+                    style={btnS("light",{padding:"14px"})}>新增客戶</button>
+          </div>
+
+          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
+            <button onClick={() => {setFStat("全部"); setPage("list");}}
+                    style={btnS("light",{padding:"14px"})}>客戶清單</button>
+            <button onClick={() => setPage("review")}
+                    style={btnS("light",{padding:"14px"})}>
+              主管審核
+              {stats && Object.values(stats).reduce((a,s)=>a+s.wait,0) > 0 &&
+                <span style={{marginLeft:6, background:C.warn, color:"#fff",
+                              borderRadius:99, padding:"1px 7px", fontSize:12}}>
+                  {Object.values(stats).reduce((a,s)=>a+s.wait,0)}
+                </span>}
+            </button>
+          </div>
+
+          <button onClick={() => setPage("admin")}
+                  style={{...btnS("ghost"), fontSize:13, color:C.muted}}>
+            月結重置
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ══════ 渲染分流 ══════ */
+  if(API_URL.indexOf("script.google.com") < 0) return (
+    <div style={{padding:24}}>
+      <div style={{...card(), lineHeight:1.9}}>
+        <b style={{fontSize:17}}>尚未設定 API 網址</b><br/>
+        請打開這個 HTML 檔，把最上方的 <code>API_URL</code> 換成你的
+        Apps Script 網頁應用程式網址（結尾是 <code>/exec</code>）。
+      </div>
+    </div>
+  );
+
+  if(!data) return (
+    <div style={{padding:40, textAlign:"center", color:C.muted}}>
+      <div className="sp" style={{fontSize:30, marginBottom:12}}>◌</div>
+      讀取中…
+      {msg && <div style={{marginTop:16, color:C.danger, fontSize:14}}>{msg}</div>}
+    </div>
+  );
+
+  let body;
+  if(page === "clean" && cur)   body = <CleanUp id={cur}/>;
+  else if(page === "review")    body = <Review/>;
+  else if(page === "admin")     body = <Admin/>;
+  else if(page === "labels")    body = <Labels/>;
+  else if(page === "addClient") body = <ClientForm editId={null}/>;
+  else if(page === "editClient")body = <ClientForm editId={cur}/>;
+  else if(cur)                  body = <Detail id={cur}/>;   // 詳情蓋在清單之上
+  else if(page === "list")      body = <List/>;
+  else                          body = <Home/>;
+
+  return (
+    <div>
+      {body}
+      {scan && <Scanner onClose={() => setScan(false)}
+                        onHit={code => {setScan(false); setCur(code); setPage("home");}}/>}
+      {msg && (
+        <div style={{position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)",
+                     background:"rgba(24,34,45,.95)", color:"#fff", padding:"12px 20px",
+                     borderRadius:10, fontSize:14, zIndex:99, maxWidth:"90vw",
+                     textAlign:"center", lineHeight:1.5, pointerEvents:"none"}}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>

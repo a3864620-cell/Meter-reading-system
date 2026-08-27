@@ -318,6 +318,40 @@ function App(){
     return Array.from(s).sort();
   }, [clients, fOwner]);
 
+  /* ── 抄表到期判斷 ──
+     優先用客戶主檔設定的固定抄表日；沒有就用上個月實際抄表日推算 */
+  const dueInfo = useCallback((c) => {
+    const lead = data?.config?.lead ?? 5;
+    let day = c.day, src = "set";
+    if(!day){
+      const lm = data?.lastMeter?.[c.id];
+      const d = lm && parseTS(lm.time);
+      if(d){ day = d.getDate(); src = "last"; }
+    }
+    if(!day) return {none:true, lead};
+
+    const [yy, mm] = month.split("-").map(Number);
+    const eom  = new Date(yy, mm, 0).getDate();      // 該月最後一天
+    const dd   = Math.min(day, eom);                 // 31號遇到小月就縮到月底
+    const due  = new Date(yy, mm-1, dd);
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff  = Math.round((due - today) / 86400000);
+
+    return {day:dd, src, due, diff, lead,
+            state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"};
+  }, [data, month]);
+
+  /* 本月未抄、且已進入提醒範圍的客戶（最急的排前面） */
+  const dueList = useMemo(() => {
+    if(!data) return [];
+    return clients
+      .filter(c => !data.meter[c.id])
+      .map(c => ({c, d:dueInfo(c)}))
+      .filter(x => !x.d.none && x.d.diff <= (x.d.lead))
+      .sort((a,b) => a.d.diff - b.d.diff);
+  }, [clients, data, dueInfo]);
+
   /* ── 冷卻判斷 ── */
   const coolInfo = useCallback((id) => {
     const cool = data?.config?.cool ?? 3;
@@ -355,13 +389,18 @@ function App(){
       if(fOwner !== "全部" && c.owner !== fOwner) return false;
       if(fDist  !== "全部" && c.dist  !== fDist)  return false;
       if(k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      if(fStat === "近期該抄"){
+        if(data?.meter[c.id]) return false;
+        const d = dueInfo(c);
+        if(d.none || d.diff > d.lead) return false;
+      }
       if(fStat === "未抄表" && data?.meter[c.id]) return false;
       if(fStat === "已抄表" && !data?.meter[c.id]) return false;
       if(fStat === "可清潔" && !coolInfo(c.id).ok) return false;
       if(fStat === "本月已清潔" && !data?.clean[c.id]) return false;
       return true;
     });
-  }, [clients, fOwner, fDist, fStat, kw, data, coolInfo]);
+  }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo]);
 
   /* ── 動作 ── */
   async function toggleMeter(c){
@@ -394,6 +433,22 @@ function App(){
       <div style={{height:"100%", width:Math.min(100, max ? v/max*100 : 0)+"%",
                    background:color, borderRadius:99, transition:"width .3s"}}/>
     </div>
+  );
+
+  /* ── 到期徽章 ── */
+  const dueText = d => d.none ? "" :
+    d.state === "over"  ? "逾期 " + Math.abs(d.diff) + " 天" :
+    d.state === "today" ? "今天到期" :
+    "還有 " + d.diff + " 天";
+  const dueColor = d =>
+    d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
+
+  const DueBadge = ({d, small}) => d.none ? null : (
+    <span style={{background:dueColor(d), color:"#fff", borderRadius:99,
+                  padding:small ? "1px 7px" : "2px 10px",
+                  fontSize:small ? 11 : 13, fontWeight:600, whiteSpace:"nowrap"}}>
+      {d.day} 號 · {dueText(d)}
+    </span>
   );
 
   /* ── 雲端照片（載入失敗時退回連結） ── */
@@ -473,10 +528,38 @@ function App(){
                 </span>
               </div>
             ) : (
-              <div style={{fontSize:19, fontWeight:700, color:C.muted, marginBottom:12}}>
+              <div style={{fontSize:19, fontWeight:700, color:C.muted, marginBottom:8}}>
                 尚未抄表
               </div>
             )}
+
+            {(() => {
+              const d = dueInfo(c);
+              const lm = data.lastMeter?.[c.id];
+              return (
+                <div style={{fontSize:13, lineHeight:1.9, marginBottom:12,
+                             paddingTop:8, borderTop:"1px solid "+C.line}}>
+                  {d.none ? (
+                    <span style={{color:C.muted}}>尚無抄表日資料（第一次抄完就會自動記住）</span>
+                  ) : (
+                    <div style={{display:"flex", alignItems:"center", gap:8,
+                                 flexWrap:"wrap"}}>
+                      <span style={{color:C.muted}}>
+                        {d.src === "set" ? "固定抄表日：每月 " + d.day + " 號"
+                                         : "依上月推算：約 " + d.day + " 號"}
+                      </span>
+                      {!m && <DueBadge d={d}/>}
+                    </div>
+                  )}
+                  <div style={{color:C.muted}}>
+                    上次抄表：{lm ? fmtShort(lm.time) + "（" + lm.month + "）"
+                                   + (lm.by ? "　"+lm.by : "")
+                                 : "無紀錄"}
+                  </div>
+                </div>
+              );
+            })()}
+
             <button onClick={() => toggleMeter(c)} disabled={busy}
                     style={btnS(m ? "light" : "accent", {width:"100%", padding:"14px"})}>
               {m ? "取消抄表標記" : "標記為已抄表"}
@@ -960,7 +1043,8 @@ function App(){
   function ClientForm({editId}){
     const src = editId ? byId[editId] : null;
     const [f, setF] = useState(src ? {...src} :
-      {id:"", owner:(user && user !== "其他") ? user : (owners[0] || ""), dist:"", name:"", memo:""});
+      {id:"", owner:(user && user !== "其他") ? user : (owners[0] || ""),
+       dist:"", name:"", memo:"", day:""});
     const [w, setW]   = useState(false);
     const [er, setEr] = useState("");
 
@@ -987,7 +1071,8 @@ function App(){
       setW(true); setEr("");
       const r = await api("saveClient", {client:{
         id, owner:f.owner.trim(), dist:f.dist.trim(),
-        name:f.name.trim(), memo:f.memo.trim()}, oldId:editId || ""});
+        name:f.name.trim(), memo:f.memo.trim(), day:f.day || ""},
+        oldId:editId || ""});
       setW(false);
       if(!r.ok) return setEr(r.error);
       await load(month);
@@ -1029,6 +1114,16 @@ function App(){
             <datalist id="distlist">
               {freeDists.map(d => <option key={d} value={d}/>)}
             </datalist>
+
+            <span style={lbl}>固定抄表日（每月幾號，可留空）</span>
+            <input type="number" min={1} max={31} value={f.day || ""}
+                   onChange={e => setF({...f, day:e.target.value})}
+                   style={inp({marginBottom:4})} inputMode="numeric"
+                   placeholder="例：25"/>
+            <div style={{fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.7}}>
+              有約定日期才填。留空的話系統會用上個月實際抄表日推算，
+              一樣會提前 {data.config?.lead ?? 5} 天提醒。
+            </div>
 
             <span style={lbl}>備註</span>
             <textarea value={f.memo} onChange={e => setF({...f, memo:e.target.value})}
@@ -1073,6 +1168,7 @@ function App(){
             <select value={fStat} onChange={e => setFStat(e.target.value)}
                     style={inp({fontSize:13, padding:"8px"})}>
               <option>全部</option>
+              <option>近期該抄</option>
               <option>未抄表</option>
               <option>已抄表</option>
               <option>可清潔</option>
@@ -1102,6 +1198,10 @@ function App(){
                     <div style={{color:m ? C.success : C.grey, fontWeight:600}}>
                       {m ? "已抄表" : "未抄表"}
                     </div>
+                    {!m && (() => { const d = dueInfo(c);
+                      return (!d.none && d.diff <= d.lead)
+                        ? <div style={{marginTop:3}}><DueBadge d={d} small/></div> : null;
+                    })()}
                     <div style={{marginTop:3, color:cl ? C.blue : (ci.ok ? C.accent : C.grey)}}>
                       {cl ? "清潔·"+cl.status : (ci.ok ? "可清潔" : "冷卻中")}
                     </div>
@@ -1155,6 +1255,48 @@ function App(){
                                         boxShadow:"0 3px 10px rgba(47,125,93,.3)"})}>
             掃描 QR 開始作業
           </button>
+
+          {/* 近期該抄表 */}
+          {dueList.length > 0 && (() => {
+            const over = dueList.filter(x => x.d.state === "over").length;
+            return (
+              <div style={card({borderLeft:"4px solid "+(over ? C.danger : C.warn)})}>
+                <div style={{display:"flex", justifyContent:"space-between",
+                             alignItems:"baseline", marginBottom:10}}>
+                  <b style={{fontSize:16}}>近期該抄表</b>
+                  <span style={{fontSize:13, color:C.muted}}>
+                    {dueList.length} 間
+                    {over > 0 && <b style={{color:C.danger, marginLeft:6}}>逾期 {over}</b>}
+                  </span>
+                </div>
+
+                {dueList.slice(0, 5).map(({c, d}) => (
+                  <div key={c.id} onClick={() => setCur(c.id)}
+                       style={{display:"flex", justifyContent:"space-between",
+                               alignItems:"center", gap:10, padding:"8px 0",
+                               borderBottom:"1px solid "+C.line, cursor:"pointer"}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:15, fontWeight:600, whiteSpace:"nowrap",
+                                   overflow:"hidden", textOverflow:"ellipsis"}}>
+                        {c.name}
+                      </div>
+                      <div style={{fontSize:11, color:C.muted, marginTop:2}}>
+                        {c.dist}　·　{c.owner}
+                        {d.src === "last" && <span style={{marginLeft:4}}>（依上月推算）</span>}
+                      </div>
+                    </div>
+                    <DueBadge d={d} small/>
+                  </div>
+                ))}
+
+                <button onClick={() => {setFStat("近期該抄"); setFOwner("全部");
+                                        setFDist("全部"); setKw(""); setPage("list");}}
+                        style={btnS("light",{width:"100%", marginTop:10, fontSize:14})}>
+                  {dueList.length > 5 ? "查看全部 " + dueList.length + " 間" : "開啟完整清單"}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* 抄表進度 */}
           <div style={card()}>

@@ -403,19 +403,36 @@ function App(){
   }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo]);
 
   /* ── 動作 ── */
-  async function toggleMeter(c){
-    const on = !data.meter[c.id];
+  async function toggleMeter(c, opt={}){
+    const on = "on" in opt ? opt.on : !data.meter[c.id];
     setBusy(true);
-    const r = await api("meterToggle", {month, id:c.id, owner:c.owner, user, on});
+    const r = await api("meterToggle",
+      {month, id:c.id, owner:c.owner, user, on, time:opt.time || ""});
     setBusy(false);
-    if(!r.ok) return toast("失敗：" + r.error, 5000);
+    if(!r.ok){ toast("失敗：" + r.error, 5000); return false; }
     setData(d => {
       const m = {...d.meter};
       if(on) m[c.id] = {time:r.time, by:user}; else delete m[c.id];
       return {...d, meter:m};
     });
-    toast(on ? "已標記抄表 ✓" : "已取消抄表");
+    toast(on ? (opt.time ? "已登錄 " + fmtShort(r.time) + " ✓" : "已標記抄表 ✓")
+             : "已取消抄表");
+    return true;
   }
+
+  /* 該月份可選的日期範圍 */
+  const monthRange = useMemo(() => {
+    const [yy, mm] = month.split("-").map(Number);
+    const eom = new Date(yy, mm, 0).getDate();
+    const t = new Date();
+    const inThis = (t.getFullYear() === yy && t.getMonth()+1 === mm);
+    return {
+      min: month + "-01",
+      max: month + "-" + pad(eom),
+      today: inThis ? month + "-" + pad(t.getDate()) : month + "-" + pad(eom),
+      nowTime: pad(t.getHours()) + ":" + pad(t.getMinutes())
+    };
+  }, [month]);
 
   /* ── 版面積木 ── */
   const Head = ({title, back}) => (
@@ -474,6 +491,9 @@ function App(){
   /* ══════ 客戶詳情 ══════ */
   function Detail({id}){
     const c = byId[id];
+    const [pick, setPick] = useState(false);   // 是否展開手動填日期
+    const [pd, setPd] = useState("");
+    const [pt, setPt] = useState("");
     if(!c) return (
       <div>
         <Head title="找不到客戶" back={() => setCur(null)}/>
@@ -560,10 +580,55 @@ function App(){
               );
             })()}
 
-            <button onClick={() => toggleMeter(c)} disabled={busy}
-                    style={btnS(m ? "light" : "accent", {width:"100%", padding:"14px"})}>
-              {m ? "取消抄表標記" : "標記為已抄表"}
-            </button>
+            {!pick ? (
+              <div>
+                <button onClick={() => toggleMeter(c)} disabled={busy}
+                        style={btnS(m ? "light" : "accent",
+                                    {width:"100%", padding:"14px"})}>
+                  {m ? "取消抄表標記" : "標記為已抄表（現在）"}
+                </button>
+                <button onClick={() => {
+                          const t = m && parseTS(m.time);
+                          setPd(t ? month + "-" + pad(t.getDate()) : monthRange.today);
+                          setPt(t ? pad(t.getHours())+":"+pad(t.getMinutes())
+                                  : monthRange.nowTime);
+                          setPick(true);
+                        }}
+                        style={{...btnS("ghost"), width:"100%", marginTop:6,
+                                fontSize:13, textAlign:"center"}}>
+                  {m ? "修改抄表日期" : "改成自己填日期"}
+                </button>
+              </div>
+            ) : (
+              <div style={{background:C.blueBg, border:"1px solid #c5daed",
+                           borderRadius:8, padding:12}}>
+                <span style={lbl}>自行輸入抄表日期</span>
+                <div style={{display:"grid", gridTemplateColumns:"1.4fr 1fr",
+                             gap:8, marginBottom:10}}>
+                  <input type="date" value={pd}
+                         min={monthRange.min} max={monthRange.max}
+                         onChange={e => setPd(e.target.value)} style={inp()}/>
+                  <input type="time" value={pt}
+                         onChange={e => setPt(e.target.value)} style={inp()}/>
+                </div>
+                <div style={{fontSize:12, color:C.muted, marginBottom:10,
+                             lineHeight:1.7}}>
+                  只能填 {month} 這個月份內的日期。
+                  要補登別的月份，請先切換上方的月份選單。
+                </div>
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+                  <button disabled={busy || !pd || !pt}
+                          onClick={async () => {
+                            const stamp = pd.replace(/-/g, "/") + " " + pt;
+                            const ok = await toggleMeter(c, {on:true, time:stamp});
+                            if(ok) setPick(false);
+                          }}
+                          style={btnS("accent",{padding:"13px"})}>確認登錄</button>
+                  <button onClick={() => setPick(false)}
+                          style={btnS("light",{padding:"13px"})}>取消</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 清潔 */}

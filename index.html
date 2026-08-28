@@ -7,9 +7,6 @@
 <title>華芝 抄表暨清潔系統</title>
 <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:#eef1f5;
@@ -34,72 +31,208 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel">
-const {useState, useEffect, useCallback, useRef, useMemo} = React;
+<script>
+const {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo
+} = React;
 
 /* ══════════════════════════════════════════════════════════
    設定 — 部署完 Apps Script 後把網址貼進來
    ══════════════════════════════════════════════════════════ */
+const JSQR_URL = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+const QRGEN_URL = "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js";
+
+/* 需要時才載入外部函式庫，首頁開啟不必等它們 */
+const loadedLibs = {};
+function loadLib(src) {
+  if (loadedLibs[src]) return loadedLibs[src];
+  loadedLibs[src] = new Promise((res, rej) => {
+    const el = document.createElement("script");
+    el.src = src;
+    el.onload = () => res(true);
+    el.onerror = () => {
+      delete loadedLibs[src];
+      rej(new Error("函式庫載入失敗"));
+    };
+    document.head.appendChild(el);
+  });
+  return loadedLibs[src];
+}
 const API_URL = "https://script.google.com/macros/s/AKfycbxRUqopT1Thd2mpGDEyetnJKdSN-PzAGmuG-4PZrRiOg9J7FejZQcSV281CFAMV-wyxVw/exec";
 
 /* ── 色盤 ── */
 const C = {
-  bg:"#eef1f5", navy:"#1b3a5c", accent:"#2f7d5d", light:"#ffffff",
-  text:"#22303f", muted:"#7c8a99", danger:"#c0392b", success:"#2f7d5d",
-  blue:"#2c6fa8", blueBg:"#eaf2fa", warn:"#c77f2a", warnBg:"#fdf4e6",
-  line:"#dde3ea", grey:"#93a1b0"
+  bg: "#eef1f5",
+  navy: "#1b3a5c",
+  accent: "#2f7d5d",
+  light: "#ffffff",
+  text: "#22303f",
+  muted: "#7c8a99",
+  danger: "#c0392b",
+  success: "#2f7d5d",
+  blue: "#2c6fa8",
+  blueBg: "#eaf2fa",
+  warn: "#c77f2a",
+  warnBg: "#fdf4e6",
+  line: "#dde3ea",
+  grey: "#93a1b0"
 };
 
 /* ── 樣式積木 ── */
-const btnS = (v="primary", ex={}) => {
-  const base = {padding:"11px 16px", borderRadius:8, fontSize:15, fontWeight:600,
-                color:"#fff", background:C.navy, lineHeight:1.2};
-  const m = {primary:{background:C.navy}, accent:{background:C.accent},
-             red:{background:C.danger}, warn:{background:C.warn},
-             light:{background:"#fff", color:C.text, border:"1px solid "+C.line},
-             ghost:{background:"transparent", color:C.blue, padding:"8px 4px"}};
-  return {...base, ...(m[v]||{}), ...ex};
+const btnS = (v = "primary", ex = {}) => {
+  const base = {
+    padding: "11px 16px",
+    borderRadius: 8,
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#fff",
+    background: C.navy,
+    lineHeight: 1.2
+  };
+  const m = {
+    primary: {
+      background: C.navy
+    },
+    accent: {
+      background: C.accent
+    },
+    red: {
+      background: C.danger
+    },
+    warn: {
+      background: C.warn
+    },
+    light: {
+      background: "#fff",
+      color: C.text,
+      border: "1px solid " + C.line
+    },
+    ghost: {
+      background: "transparent",
+      color: C.blue,
+      padding: "8px 4px"
+    }
+  };
+  return {
+    ...base,
+    ...(m[v] || {}),
+    ...ex
+  };
 };
-const inp = (ex={}) => ({padding:"10px 12px", borderRadius:8, border:"1px solid "+C.line,
-                         fontSize:15, background:"#fff", color:C.text, width:"100%", ...ex});
-const lbl = {fontSize:11, color:C.muted, letterSpacing:.5, marginBottom:4, display:"block"};
-const card = (ex={}) => ({background:"#fff", borderRadius:10, padding:14,
-                          border:"1px solid "+C.line, ...ex});
+const inp = (ex = {}) => ({
+  padding: "10px 12px",
+  borderRadius: 8,
+  border: "1px solid " + C.line,
+  fontSize: 15,
+  background: "#fff",
+  color: C.text,
+  width: "100%",
+  ...ex
+});
+const lbl = {
+  fontSize: 11,
+  color: C.muted,
+  letterSpacing: .5,
+  marginBottom: 4,
+  display: "block"
+};
+const card = (ex = {}) => ({
+  background: "#fff",
+  borderRadius: 10,
+  padding: 14,
+  border: "1px solid " + C.line,
+  ...ex
+});
 
 /* ── localStorage 安全包裝 ── */
 const LS = {
-  get(k, d){ try{ const v = localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } },
-  set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+  get(k, d) {
+    try {
+      const v = localStorage.getItem(k);
+      return v === null ? d : v;
+    } catch (e) {
+      return d;
+    }
+  },
+  set(k, v) {
+    try {
+      localStorage.setItem(k, v);
+    } catch (e) {}
+  }
 };
 
 /* ── 日期工具 ── */
-const pad = n => String(n).padStart(2,"0");
-const monthKey = d => d.getFullYear()+"-"+pad(d.getMonth()+1);
+const pad = n => String(n).padStart(2, "0");
+const monthKey = d => d.getFullYear() + "-" + pad(d.getMonth() + 1);
 const parseTS = s => {
-  if(!s) return null;
-  const d = new Date(String(s).replace(/-/g,"/"));
+  if (!s) return null;
+  const d = new Date(String(s).replace(/-/g, "/"));
   return isNaN(d) ? null : d;
 };
 const fmtShort = s => {
-  const d = parseTS(s); if(!d) return "";
-  return (d.getMonth()+1)+"/"+d.getDate()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  const d = parseTS(s);
+  if (!d) return "";
+  return d.getMonth() + 1 + "/" + d.getDate() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
 };
 /** 相差幾個月（含小數，用天數換算） */
 const monthsAgo = s => {
-  const d = parseTS(s); if(!d) return 999;
+  const d = parseTS(s);
+  if (!d) return 999;
   return (Date.now() - d.getTime()) / 86400000 / 30;
 };
 
+/* ── 本地快取：重開 App 時先顯示上次資料，再背景更新 ── */
+const CACHE_PREFIX = "hz_boot_";
+function cacheGet(month) {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + month);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return o && o.data ? o : null;
+  } catch (e) {
+    return null;
+  }
+}
+function cacheSet(month, data) {
+  try {
+    // 只留最近 2 個月，避免佔滿空間
+    const keys = Object.keys(localStorage).filter(k => k.indexOf(CACHE_PREFIX) === 0);
+    keys.sort().slice(0, Math.max(0, keys.length - 1)).forEach(k => {
+      if (k !== CACHE_PREFIX + month) localStorage.removeItem(k);
+    });
+    localStorage.setItem(CACHE_PREFIX + month, JSON.stringify({
+      at: Date.now(),
+      data
+    }));
+  } catch (e) {}
+}
+
 /* ── API ── */
-async function api(action, body={}){
-  const r = await fetch(API_URL, {method:"POST", body:JSON.stringify({action, ...body})});
+async function api(action, body = {}) {
+  const r = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action,
+      ...body
+    })
+  });
   const t = await r.text();
-  try { return JSON.parse(t); }
-  catch(e){ return {ok:false, error:"回應格式錯誤："+t.slice(0,120)}; }
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    return {
+      ok: false,
+      error: "回應格式錯誤：" + t.slice(0, 120)
+    };
+  }
 }
 
 /* ── 照片壓縮 + 時間浮水印 ── */
-function processPhoto(file, caption){
+function processPhoto(file, caption) {
   return new Promise((res, rej) => {
     const fr = new FileReader();
     fr.onerror = () => rej(new Error("讀取照片失敗"));
@@ -108,37 +241,46 @@ function processPhoto(file, caption){
       img.onerror = () => rej(new Error("照片格式無法解析"));
       img.onload = () => {
         const MAX = 1080;
-        let {width:w, height:h} = img;
-        const s = Math.min(1, MAX/Math.max(w,h));
-        w = Math.round(w*s); h = Math.round(h*s);
-
+        let {
+          width: w,
+          height: h
+        } = img;
+        const s = Math.min(1, MAX / Math.max(w, h));
+        w = Math.round(w * s);
+        h = Math.round(h * s);
         const cv = document.createElement("canvas");
-        cv.width = w; cv.height = h;
+        cv.width = w;
+        cv.height = h;
         const cx = cv.getContext("2d");
         cx.drawImage(img, 0, 0, w, h);
 
         // 浮水印
-        const fs = Math.max(14, Math.round(w/32));
-        cx.font = "bold "+fs+"px sans-serif";
-        cx.textAlign = "right"; cx.textBaseline = "bottom";
-        cx.lineWidth = Math.max(2, fs/6);
+        const fs = Math.max(14, Math.round(w / 32));
+        cx.font = "bold " + fs + "px sans-serif";
+        cx.textAlign = "right";
+        cx.textBaseline = "bottom";
+        cx.lineWidth = Math.max(2, fs / 6);
         cx.strokeStyle = "rgba(0,0,0,.75)";
         cx.fillStyle = "#fff";
         const lines = caption.split("\n");
         lines.forEach((ln, i) => {
-          const y = h - 10 - (lines.length-1-i)*(fs*1.25);
-          cx.strokeText(ln, w-12, y);
-          cx.fillText(ln, w-12, y);
+          const y = h - 10 - (lines.length - 1 - i) * (fs * 1.25);
+          cx.strokeText(ln, w - 12, y);
+          cx.fillText(ln, w - 12, y);
         });
 
         // 自適應品質：一路降到 350KB 以下為止（雜訊多的照片才會用到後面幾段）
         const LIMIT = 350 * 1024;
         let url = "";
-        for (const q of [0.72, 0.6, 0.5, 0.42, 0.35]){
+        for (const q of [0.72, 0.6, 0.5, 0.42, 0.35]) {
           url = cv.toDataURL("image/jpeg", q);
           if (url.length * 0.75 <= LIMIT) break;
         }
-        res({base64:url.split(",")[1], preview:url, kb:Math.round(url.length*0.75/1024)});
+        res({
+          base64: url.split(",")[1],
+          preview: url,
+          kb: Math.round(url.length * 0.75 / 1024)
+        });
       };
       img.src = fr.result;
     };
@@ -147,81 +289,125 @@ function processPhoto(file, caption){
 }
 
 /* ── QR 向量圖 ── */
-function QRSvg({text, size}){
+function QRSvg({
+  text,
+  size,
+  ready
+}) {
   const d = useMemo(() => {
-    if(!window.qrcode) return null;
-    try{
+    if (!window.qrcode) return null;
+    try {
       const q = window.qrcode(0, "M");
       q.addData(String(text));
       q.make();
       const n = q.getModuleCount();
       let path = "";
-      for(let r = 0; r < n; r++)
-        for(let c = 0; c < n; c++)
-          if(q.isDark(r, c)) path += "M"+c+" "+r+"h1v1h-1z";
-      return {n, path};
-    }catch(e){ return null; }
-  }, [text]);
-
-  if(!d) return <div style={{width:size, height:size, background:"#eee"}}/>;
-  return (
-    <svg viewBox={"0 0 "+d.n+" "+d.n} width={size} height={size}
-         shapeRendering="crispEdges" style={{display:"block"}}>
-      <rect width={d.n} height={d.n} fill="#fff"/>
-      <path d={d.path} fill="#000"/>
-    </svg>
-  );
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) path += "M" + c + " " + r + "h1v1h-1z";
+      return {
+        n,
+        path
+      };
+    } catch (e) {
+      return null;
+    }
+  }, [text, ready]);
+  if (!d) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: size,
+      height: size,
+      background: "#eee"
+    }
+  });
+  return /*#__PURE__*/React.createElement("svg", {
+    viewBox: "0 0 " + d.n + " " + d.n,
+    width: size,
+    height: size,
+    shapeRendering: "crispEdges",
+    style: {
+      display: "block"
+    }
+  }, /*#__PURE__*/React.createElement("rect", {
+    width: d.n,
+    height: d.n,
+    fill: "#fff"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: d.path,
+    fill: "#000"
+  }));
 }
 
 /* ══════════════════════════════════════════════════════════
    QR 掃描
    ══════════════════════════════════════════════════════════ */
-function Scanner({onHit, onClose}){
-  const vRef = useRef(null), cRef = useRef(null);
+function Scanner({
+  onHit,
+  onClose
+}) {
+  const vRef = useRef(null),
+    cRef = useRef(null);
   const [err, setErr] = useState("");
   const stop = useRef(false);
-
   useEffect(() => {
     let stream, raf, det;
     stop.current = false;
-
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video:{facingMode:{ideal:"environment"}}
+          video: {
+            facingMode: {
+              ideal: "environment"
+            }
+          }
         });
         const v = vRef.current;
-        if(!v) return;
+        if (!v) return;
         v.srcObject = stream;
-        v.setAttribute("playsinline","true");
+        v.setAttribute("playsinline", "true");
         await v.play();
-
-        if("BarcodeDetector" in window){
-          try { det = new window.BarcodeDetector({formats:["qr_code"]}); } catch(e){ det = null; }
+        if ("BarcodeDetector" in window) {
+          try {
+            det = new window.BarcodeDetector({
+              formats: ["qr_code"]
+            });
+          } catch (e) {
+            det = null;
+          }
         }
-
+        if (!det) {
+          try {
+            await loadLib(JSQR_URL);
+          } catch (e) {
+            setErr("掃描元件載入失敗，請檢查網路後重開");
+            return;
+          }
+        }
         const tick = async () => {
-          if(stop.current) return;
-          if(v.readyState === v.HAVE_ENOUGH_DATA){
+          if (stop.current) return;
+          if (v.readyState === v.HAVE_ENOUGH_DATA) {
             let code = null;
-            if(det){
+            if (det) {
               try {
                 const r = await det.detect(v);
-                if(r && r.length) code = r[0].rawValue;
-              } catch(e){ det = null; }
+                if (r && r.length) code = r[0].rawValue;
+              } catch (e) {
+                det = null;
+              }
             }
-            if(!code && window.jsQR){
+            if (!code && window.jsQR) {
               const cv = cRef.current;
-              cv.width = v.videoWidth; cv.height = v.videoHeight;
-              const cx = cv.getContext("2d", {willReadFrequently:true});
+              cv.width = v.videoWidth;
+              cv.height = v.videoHeight;
+              const cx = cv.getContext("2d", {
+                willReadFrequently: true
+              });
               cx.drawImage(v, 0, 0, cv.width, cv.height);
               const d = cx.getImageData(0, 0, cv.width, cv.height);
               const q = window.jsQR(d.data, d.width, d.height);
-              if(q) code = q.data;
+              if (q) code = q.data;
             }
-            if(code){
+            if (code) {
               stop.current = true;
-              if(navigator.vibrate) navigator.vibrate(60);
+              if (navigator.vibrate) navigator.vibrate(60);
               onHit(String(code).trim());
               return;
             }
@@ -229,194 +415,380 @@ function Scanner({onHit, onClose}){
           raf = requestAnimationFrame(tick);
         };
         raf = requestAnimationFrame(tick);
-      } catch(e){
+      } catch (e) {
         setErr("無法開啟相機：" + e.message + "（請確認網址是 https 並允許相機權限）");
       }
     })();
-
     return () => {
       stop.current = true;
-      if(raf) cancelAnimationFrame(raf);
-      if(stream) stream.getTracks().forEach(t => t.stop());
+      if (raf) cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach(t => t.stop());
     };
   }, [onHit]);
-
-  return (
-    <div style={{position:"fixed", inset:0, background:"#000", zIndex:90,
-                 display:"flex", flexDirection:"column"}}>
-      <div style={{padding:"12px 14px", color:"#fff", display:"flex",
-                   justifyContent:"space-between", alignItems:"center"}}>
-        <b style={{fontSize:16}}>掃描客戶 QR</b>
-        <button onClick={onClose} style={btnS("light",{padding:"7px 14px"})}>關閉</button>
-      </div>
-      <div style={{flex:1, position:"relative", overflow:"hidden"}}>
-        <video ref={vRef} style={{width:"100%", height:"100%", objectFit:"cover"}} muted/>
-        <canvas ref={cRef} style={{display:"none"}}/>
-        <div style={{position:"absolute", top:"50%", left:"50%",
-                     transform:"translate(-50%,-50%)", width:"66%", aspectRatio:"1",
-                     border:"3px solid rgba(255,255,255,.9)", borderRadius:16}}/>
-      </div>
-      <div style={{padding:14, color:"#fff", fontSize:13, textAlign:"center", minHeight:52}}>
-        {err || "把服務編號的 QR 對準框內"}
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "#000",
+      zIndex: 90,
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "12px 14px",
+      color: "#fff",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 16
+    }
+  }, "\u6383\u63CF\u5BA2\u6236 QR"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: btnS("light", {
+      padding: "7px 14px"
+    })
+  }, "\u95DC\u9589")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      position: "relative",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("video", {
+    ref: vRef,
+    style: {
+      width: "100%",
+      height: "100%",
+      objectFit: "cover"
+    },
+    muted: true
+  }), /*#__PURE__*/React.createElement("canvas", {
+    ref: cRef,
+    style: {
+      display: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%,-50%)",
+      width: "66%",
+      aspectRatio: "1",
+      border: "3px solid rgba(255,255,255,.9)",
+      borderRadius: 16
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 14,
+      color: "#fff",
+      fontSize: 13,
+      textAlign: "center",
+      minHeight: 52
+    }
+  }, err || "把服務編號的 QR 對準框內"));
 }
 
 /* ══════════════════════════════════════════════════════════
    主程式
    ══════════════════════════════════════════════════════════ */
-function App(){
-  const [page, setPage]     = useState("home");
-  const [month, setMonth]   = useState(monthKey(new Date()));
-  const [data, setData]     = useState(null);
-  const [busy, setBusy]     = useState(true);
-  const [msg, setMsg]       = useState("");
-  const [user, setUser]     = useState(LS.get("hz_user",""));
-  const [cur, setCur]       = useState(null);      // 目前開啟的客戶 id
-  const [scan, setScan]     = useState(false);
-  const [pin, setPin]       = useState(LS.get("hz_pin",""));
-  const [prev, setPrev]     = useState("home");   // 進清潔頁前停在哪一頁
-  const [labelSel, setLabelSel] = useState([]);   // 預先勾好的標籤客戶
+function App() {
+  const [page, setPage] = useState("home");
+  const [month, setMonth] = useState(monthKey(new Date()));
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [msg, setMsg] = useState("");
+  const [user, setUser] = useState(LS.get("hz_user", ""));
+  const [cur, setCur] = useState(null); // 目前開啟的客戶 id
+  const [scan, setScan] = useState(false);
+  const [pin, setPin] = useState(LS.get("hz_pin", ""));
+  const [stale, setStale] = useState(0); // >0 表示畫面是快取資料
+  const [prev, setPrev] = useState("home"); // 進清潔頁前停在哪一頁
+  const [labelSel, setLabelSel] = useState([]); // 預先勾好的標籤客戶
 
   // 清單篩選
   const [fOwner, setFOwner] = useState("全部");
-  const [fDist, setFDist]   = useState("全部");
-  const [fStat, setFStat]   = useState("全部");
-  const [kw, setKw]         = useState("");
-
-  const toast = (t, ms=2600) => { setMsg(t); setTimeout(() => setMsg(""), ms); };
-
-  const load = useCallback(async (mk) => {
+  const [fDist, setFDist] = useState("全部");
+  const [fStat, setFStat] = useState("全部");
+  const [kw, setKw] = useState("");
+  const toast = (t, ms = 2600) => {
+    setMsg(t);
+    setTimeout(() => setMsg(""), ms);
+  };
+  const load = useCallback(async (mk, opt = {}) => {
+    // 先把快取畫出來，使用者不用等網路
+    let hadCache = false;
+    if (!opt.noCache) {
+      const c = cacheGet(mk);
+      if (c) {
+        setData(c.data);
+        setStale(c.at);
+        hadCache = true;
+      }
+    }
     setBusy(true);
     try {
       const r = await fetch(API_URL + "?action=bootstrap&month=" + mk);
       const j = await r.json();
-      if(!j.ok) throw new Error(j.error || "讀取失敗");
+      if (!j.ok) throw new Error(j.error || "讀取失敗");
       setData(j);
-    } catch(e){
-      toast("連線失敗：" + e.message, 6000);
+      setStale(0);
+      cacheSet(mk, j);
+    } catch (e) {
+      if (hadCache) toast("目前離線，顯示的是上次同步的資料", 5000);else toast("連線失敗：" + e.message, 6000);
     }
     setBusy(false);
   }, []);
-
-  useEffect(() => { load(month); }, [month, load]);
-
+  useEffect(() => {
+    load(month);
+  }, [month, load]);
   const clients = data ? data.clients : [];
   const byId = useMemo(() => {
-    const m = {}; clients.forEach(c => m[c.id] = c); return m;
+    const m = {};
+    clients.forEach(c => m[c.id] = c);
+    return m;
   }, [clients]);
-
   const owners = useMemo(() => {
     const s = new Set(clients.map(c => c.owner).filter(Boolean));
     return Array.from(s);
   }, [clients]);
-
   const dists = useMemo(() => {
-    const s = new Set(clients.filter(c => fOwner === "全部" || c.owner === fOwner)
-                             .map(c => c.dist).filter(Boolean));
+    const s = new Set(clients.filter(c => fOwner === "全部" || c.owner === fOwner).map(c => c.dist).filter(Boolean));
     return Array.from(s).sort();
   }, [clients, fOwner]);
 
+  /* ── 抄表週期 ── */
+  const CYCLES = [{
+    v: 1,
+    t: "每月"
+  }, {
+    v: 2,
+    t: "每 2 個月"
+  }, {
+    v: 3,
+    t: "每季"
+  }, {
+    v: 6,
+    t: "每半年"
+  }, {
+    v: 0,
+    t: "不定期（不列入統計）"
+  }];
+  const cycText = v => (CYCLES.find(x => x.v === Number(v)) || CYCLES[0]).t;
+
   /* ── 抄表到期判斷 ──
-     優先用客戶主檔設定的固定抄表日；沒有就用上個月實際抄表日推算 */
-  const dueInfo = useCallback((c) => {
+     已退租、不定期 → 不列入
+     本月已抄 → 算下一次（本月 + 週期）
+     本月未抄 → 每月客戶算本月；長週期客戶算「上次抄表月 + 週期」 */
+  const dueInfo = useCallback(c => {
     const lead = data?.config?.lead ?? 5;
-    let day = c.day, src = "set";
-    if(!day){
-      const lm = data?.lastMeter?.[c.id];
-      const d = lm && parseTS(lm.time);
-      if(d){ day = d.getDate(); src = "last"; }
+    if (c.active === false) return {
+      none: true,
+      lead,
+      inactive: true
+    };
+    const cyc = Number(c.cycle ?? 1);
+    if (cyc === 0) return {
+      none: true,
+      lead,
+      adhoc: true
+    };
+    const done = !!data?.meter?.[c.id];
+    let day = c.day,
+      src = "set";
+    if (!day) {
+      const ref = done ? data.meter[c.id] : data?.lastMeter?.[c.id];
+      const d = ref && parseTS(ref.time);
+      if (d) {
+        day = d.getDate();
+        src = "last";
+      }
     }
-    if(!day) return {none:true, lead};
-
-    const [yy, mm] = month.split("-").map(Number);
-    const eom  = new Date(yy, mm, 0).getDate();      // 該月最後一天
-    const dd   = Math.min(day, eom);                 // 31號遇到小月就縮到月底
-    const due  = new Date(yy, mm-1, dd);
-
-    const today = new Date(); today.setHours(0,0,0,0);
-    const diff  = Math.round((due - today) / 86400000);
-
-    return {day:dd, src, due, diff, lead,
-            state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"};
+    if (!day) return {
+      none: true,
+      lead,
+      done
+    };
+    let yy, mm;
+    const lm = data?.lastMeter?.[c.id];
+    if (done) {
+      [yy, mm] = month.split("-").map(Number);
+      mm += cyc;
+    } else if (cyc > 1 && lm) {
+      [yy, mm] = lm.month.split("-").map(Number);
+      mm += cyc;
+    } else {
+      [yy, mm] = month.split("-").map(Number);
+    }
+    while (mm > 12) {
+      mm -= 12;
+      yy += 1;
+    }
+    const eom = new Date(yy, mm, 0).getDate();
+    const dd = Math.min(day, eom);
+    const due = new Date(yy, mm - 1, dd);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((due - today) / 86400000);
+    return {
+      day: dd,
+      mon: mm,
+      src,
+      due,
+      diff,
+      lead,
+      done,
+      cyc,
+      state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"
+    };
   }, [data, month]);
 
-  /* 本月未抄、且已進入提醒範圍的客戶（最急的排前面） */
+  /* 本月是否該抄（用來算進度分母） */
+  const dueThisMonth = useCallback(c => {
+    if (c.active === false) return false;
+    const cyc = Number(c.cycle ?? 1);
+    if (cyc === 0) return false;
+    if (cyc === 1) return true;
+    if (data?.meter?.[c.id]) return true;
+    const lm = data?.lastMeter?.[c.id];
+    if (!lm) return true;
+    const [y1, m1] = lm.month.split("-").map(Number);
+    const [y2, m2] = month.split("-").map(Number);
+    return (y2 - y1) * 12 + (m2 - m1) >= cyc;
+  }, [data, month]);
+
+  /* 已進入提醒範圍的客戶（最急的排前面）。只在檢視當月時才有意義 */
   const dueList = useMemo(() => {
-    if(!data) return [];
-    return clients
-      .filter(c => !data.meter[c.id])
-      .map(c => ({c, d:dueInfo(c)}))
-      .filter(x => !x.d.none && x.d.diff <= (x.d.lead))
-      .sort((a,b) => a.d.diff - b.d.diff);
-  }, [clients, data, dueInfo]);
+    if (!data || month !== monthKey(new Date())) return [];
+    return clients.map(c => ({
+      c,
+      d: dueInfo(c)
+    })).filter(x => !x.d.none && x.d.diff <= x.d.lead).sort((a, b) => a.d.diff - b.d.diff);
+  }, [clients, data, dueInfo, month]);
 
   /* ── 冷卻判斷 ── */
-  const coolInfo = useCallback((id) => {
+  const coolInfo = useCallback(id => {
     const cool = data?.config?.cool ?? 3;
     const last = data?.lastClean?.[id];
-    if(!last || !last.time) return {ok:true, never:true, cool};
+    if (!last || !last.time) return {
+      ok: true,
+      never: true,
+      cool
+    };
     const ago = monthsAgo(last.time);
-    if(ago >= cool) return {ok:true, last, ago, cool};
-    return {ok:false, last, ago, cool, left:Math.max(1, Math.ceil(cool - ago))};
+    if (ago >= cool) return {
+      ok: true,
+      last,
+      ago,
+      cool
+    };
+    return {
+      ok: false,
+      last,
+      ago,
+      cool,
+      left: Math.max(1, Math.ceil(cool - ago))
+    };
   }, [data]);
 
   /* ── 統計 ── */
   const stats = useMemo(() => {
-    if(!data) return null;
+    if (!data) return null;
     const goal = data.config?.goal ?? 20;
     const o = {};
     clients.forEach(c => {
       const k = c.owner || "未指定";
-      o[k] = o[k] || {total:0, done:0, pass:0, wait:0, reject:0, goal};
+      o[k] = o[k] || {
+        total: 0,
+        done: 0,
+        pass: 0,
+        wait: 0,
+        reject: 0,
+        goal,
+        off: 0,
+        adhoc: 0
+      };
+      if (c.active === false) {
+        o[k].off++;
+        return;
+      }
+      if (Number(c.cycle ?? 1) === 0) o[k].adhoc++;
+      if (!dueThisMonth(c)) return;
       o[k].total++;
-      if(data.meter[c.id]) o[k].done++;
+      if (data.meter[c.id]) o[k].done++;
+    });
+    clients.forEach(c => {
+      if (c.active === false) return;
+      const k = c.owner || "未指定";
+      if (!o[k]) return;
       const cl = data.clean[c.id];
-      if(cl){
-        if(cl.status === "已通過") o[k].pass++;
-        else if(cl.status === "退回") o[k].reject++;
-        else o[k].wait++;
+      if (cl) {
+        if (cl.status === "已通過") o[k].pass++;else if (cl.status === "退回") o[k].reject++;else o[k].wait++;
       }
     });
     return o;
-  }, [data, clients]);
+  }, [data, clients, dueThisMonth]);
 
   /* ── 篩選後清單 ── */
   const listed = useMemo(() => {
     const k = kw.trim();
     return clients.filter(c => {
-      if(fOwner !== "全部" && c.owner !== fOwner) return false;
-      if(fDist  !== "全部" && c.dist  !== fDist)  return false;
-      if(k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
-      if(fStat === "近期該抄"){
-        if(data?.meter[c.id]) return false;
+      if (fStat === "已退租") {
+        if (c.active !== false) return false;
+      } else if (c.active === false) return false; // 預設不顯示已退租
+      if (fOwner !== "全部" && c.owner !== fOwner) return false;
+      if (fDist !== "全部" && c.dist !== fDist) return false;
+      if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      if (fStat === "近期該抄") {
         const d = dueInfo(c);
-        if(d.none || d.diff > d.lead) return false;
+        if (d.none || d.diff > d.lead) return false;
       }
-      if(fStat === "未抄表" && data?.meter[c.id]) return false;
-      if(fStat === "已抄表" && !data?.meter[c.id]) return false;
-      if(fStat === "可清潔" && !coolInfo(c.id).ok) return false;
-      if(fStat === "本月已清潔" && !data?.clean[c.id]) return false;
+      if (fStat === "未抄表") {
+        if (data?.meter[c.id]) return false;
+        if (!dueThisMonth(c)) return false;
+      }
+      if (fStat === "已抄表" && !data?.meter[c.id]) return false;
+      if (fStat === "可清潔" && !coolInfo(c.id).ok) return false;
+      if (fStat === "本月已清潔" && !data?.clean[c.id]) return false;
+      if (fStat === "不定期" && Number(c.cycle ?? 1) !== 0) return false;
       return true;
     });
-  }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo]);
+  }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo, dueThisMonth]);
 
   /* ── 動作 ── */
-  async function toggleMeter(c, opt={}){
+  async function toggleMeter(c, opt = {}) {
     const on = "on" in opt ? opt.on : !data.meter[c.id];
     setBusy(true);
-    const r = await api("meterToggle",
-      {month, id:c.id, owner:c.owner, user, on, time:opt.time || ""});
-    setBusy(false);
-    if(!r.ok){ toast("失敗：" + r.error, 5000); return false; }
-    setData(d => {
-      const m = {...d.meter};
-      if(on) m[c.id] = {time:r.time, by:user}; else delete m[c.id];
-      return {...d, meter:m};
+    const r = await api("meterToggle", {
+      month,
+      id: c.id,
+      owner: c.owner,
+      user,
+      on,
+      time: opt.time || ""
     });
-    toast(on ? (opt.time ? "已登錄 " + fmtShort(r.time) + " ✓" : "已標記抄表 ✓")
-             : "已取消抄表");
+    setBusy(false);
+    if (!r.ok) {
+      toast("失敗：" + r.error, 5000);
+      return false;
+    }
+    setData(d => {
+      const m = {
+        ...d.meter
+      };
+      if (on) m[c.id] = {
+        time: r.time,
+        by: user
+      };else delete m[c.id];
+      return {
+        ...d,
+        meter: m
+      };
+    });
+    toast(on ? opt.time ? "已登錄 " + fmtShort(r.time) + " ✓" : "已標記抄表 ✓" : "已取消抄表");
     return true;
   }
 
@@ -425,7 +797,7 @@ function App(){
     const [yy, mm] = month.split("-").map(Number);
     const eom = new Date(yy, mm, 0).getDate();
     const t = new Date();
-    const inThis = (t.getFullYear() === yy && t.getMonth()+1 === mm);
+    const inThis = t.getFullYear() === yy && t.getMonth() + 1 === mm;
     return {
       min: month + "-01",
       max: month + "-" + pad(eom),
@@ -433,1076 +805,2131 @@ function App(){
       nowTime: pad(t.getHours()) + ":" + pad(t.getMinutes())
     };
   }, [month]);
+  async function setActive(c, active) {
+    setBusy(true);
+    const r = await api("setActive", {
+      id: c.id,
+      active
+    });
+    setBusy(false);
+    if (!r.ok) return toast("失敗：" + r.error, 5000);
+    setData(d => ({
+      ...d,
+      clients: d.clients.map(x => x.id === c.id ? {
+        ...x,
+        active
+      } : x)
+    }));
+    toast(active ? "已復原為服務中" : "已標記為退租");
+  }
 
   /* ── 版面積木 ── */
-  const Head = ({title, back}) => (
-    <div style={{background:C.navy, color:"#fff", padding:"14px 16px",
-                 display:"flex", alignItems:"center", gap:10, position:"sticky",
-                 top:0, zIndex:20}}>
-      {back && <button onClick={back} style={btnS("light",{padding:"6px 12px", fontSize:14})}>←</button>}
-      <b style={{fontSize:17}}>{title}</b>
-      {busy && <span className="sp" style={{marginLeft:"auto", fontSize:15}}>◌</span>}
-    </div>
-  );
-
-  const Bar = ({v, max, color}) => (
-    <div style={{height:8, background:"#e6ebf1", borderRadius:99, overflow:"hidden"}}>
-      <div style={{height:"100%", width:Math.min(100, max ? v/max*100 : 0)+"%",
-                   background:color, borderRadius:99, transition:"width .3s"}}/>
-    </div>
-  );
+  const Head = ({
+    title,
+    back
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.navy,
+      color: "#fff",
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      position: "sticky",
+      top: 0,
+      zIndex: 20
+    }
+  }, back && /*#__PURE__*/React.createElement("button", {
+    onClick: back,
+    style: btnS("light", {
+      padding: "6px 12px",
+      fontSize: 14
+    })
+  }, "\u2190"), /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 17
+    }
+  }, title), busy && /*#__PURE__*/React.createElement("span", {
+    className: "sp",
+    style: {
+      marginLeft: "auto",
+      fontSize: 15
+    }
+  }, "\u25CC"));
+  const Bar = ({
+    v,
+    max,
+    color
+  }) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 8,
+      background: "#e6ebf1",
+      borderRadius: 99,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: "100%",
+      width: Math.min(100, max ? v / max * 100 : 0) + "%",
+      background: color,
+      borderRadius: 99,
+      transition: "width .3s"
+    }
+  }));
 
   /* ── 到期徽章 ── */
-  const dueText = d => d.none ? "" :
-    d.state === "over"  ? "逾期 " + Math.abs(d.diff) + " 天" :
-    d.state === "today" ? "今天到期" :
-    "還有 " + d.diff + " 天";
-  const dueColor = d =>
-    d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
-
-  const DueBadge = ({d, small}) => d.none ? null : (
-    <span style={{background:dueColor(d), color:"#fff", borderRadius:99,
-                  padding:small ? "1px 7px" : "2px 10px",
-                  fontSize:small ? 11 : 13, fontWeight:600, whiteSpace:"nowrap"}}>
-      {d.day} 號 · {dueText(d)}
-    </span>
-  );
+  const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
+  const dueColor = d => d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
+  const DueBadge = ({
+    d,
+    small
+  }) => d.none ? null : /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: dueColor(d),
+      color: "#fff",
+      borderRadius: 99,
+      padding: small ? "1px 7px" : "2px 10px",
+      fontSize: small ? 11 : 13,
+      fontWeight: 600,
+      whiteSpace: "nowrap"
+    }
+  }, d.mon, "/", d.day, " \xB7 ", dueText(d));
 
   /* ── 雲端照片（載入失敗時退回連結） ── */
-  function Photo({id, link, w}){
+  function Photo({
+    id,
+    link,
+    w
+  }) {
     const [bad, setBad] = useState(false);
-    if(bad) return (
-      <a href={link || ("https://drive.google.com/file/d/"+id+"/view")}
-         target="_blank" rel="noreferrer"
-         style={{...card({background:C.blueBg, borderColor:"#c5daed",
-                          display:"block", textAlign:"center"}),
-                 color:C.blue, fontSize:14, textDecoration:"none"}}>
-        照片無法直接預覽，點此在雲端硬碟開啟 ↗
-      </a>
-    );
-    return (
-      <img src={"https://drive.google.com/thumbnail?id="+id+"&sz=w"+w}
-           alt="清潔照片" onError={() => setBad(true)}
-           style={{width:"100%", borderRadius:8, border:"1px solid "+C.line,
-                   background:"#f4f6f9"}}/>
-    );
+    if (bad) return /*#__PURE__*/React.createElement("a", {
+      href: link || "https://drive.google.com/file/d/" + id + "/view",
+      target: "_blank",
+      rel: "noreferrer",
+      style: {
+        ...card({
+          background: C.blueBg,
+          borderColor: "#c5daed",
+          display: "block",
+          textAlign: "center"
+        }),
+        color: C.blue,
+        fontSize: 14,
+        textDecoration: "none"
+      }
+    }, "\u7167\u7247\u7121\u6CD5\u76F4\u63A5\u9810\u89BD\uFF0C\u9EDE\u6B64\u5728\u96F2\u7AEF\u786C\u789F\u958B\u555F \u2197");
+    return /*#__PURE__*/React.createElement("img", {
+      src: "https://drive.google.com/thumbnail?id=" + id + "&sz=w" + w,
+      alt: "\u6E05\u6F54\u7167\u7247",
+      onError: () => setBad(true),
+      style: {
+        width: "100%",
+        borderRadius: 8,
+        border: "1px solid " + C.line,
+        background: "#f4f6f9"
+      }
+    });
   }
 
   /* ══════ 客戶詳情 ══════ */
-  function Detail({id}){
+  function Detail({
+    id
+  }) {
     const c = byId[id];
-    const [pick, setPick] = useState(false);   // 是否展開手動填日期
+    const [pick, setPick] = useState(false); // 是否展開手動填日期
     const [pd, setPd] = useState("");
     const [pt, setPt] = useState("");
-    if(!c) return (
-      <div>
-        <Head title="找不到客戶" back={() => setCur(null)}/>
-        <div style={{padding:16}}>
-          <div style={card()}>
-            編號 <b>{id}</b> 不在客戶主檔中。<br/>
-            <span style={{color:C.muted, fontSize:13}}>
-              請確認 QR 是否為舊版，或這間客戶尚未建檔。
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-
-    const m  = data.meter[c.id];
+    if (!c) return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "\u627E\u4E0D\u5230\u5BA2\u6236",
+      back: () => setCur(null)
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, "\u7DE8\u865F ", /*#__PURE__*/React.createElement("b", null, id), " \u4E0D\u5728\u5BA2\u6236\u4E3B\u6A94\u4E2D\u3002", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted,
+        fontSize: 13
+      }
+    }, "\u8ACB\u78BA\u8A8D QR \u662F\u5426\u70BA\u820A\u7248\uFF0C\u6216\u9019\u9593\u5BA2\u6236\u5C1A\u672A\u5EFA\u6A94\u3002"))));
+    const m = data.meter[c.id];
     const cl = data.clean[c.id];
     const ci = coolInfo(c.id);
-
-    const stColor = {"已通過":C.success, "待審核":C.warn, "退回":C.danger}[cl?.status] || C.muted;
-
-    return (
-      <div>
-        <Head title={c.id} back={() => setCur(null)}/>
-        <div style={{padding:14, display:"grid", gap:12}}>
-
-          <div style={card()}>
-            <div style={{fontSize:22, fontWeight:700, marginBottom:6}}>{c.name}</div>
-            <div style={{color:C.muted, fontSize:14}}>{c.owner}　·　{c.dist}</div>
-            <div style={{display:"flex", gap:8, marginTop:12}}>
-              <button onClick={() => setPage("editClient")}
-                      style={btnS("light",{fontSize:13, padding:"8px 14px"})}>編輯資料</button>
-              <button onClick={() => {setLabelSel([c.id]); setPage("labels");}}
-                      style={btnS("light",{fontSize:13, padding:"8px 14px"})}>列印 QR 標籤</button>
-            </div>
-            {c.memo && (
-              <div style={{marginTop:10, padding:"9px 11px", background:C.warnBg,
-                           border:"1px solid #f0dcb8", borderRadius:8, fontSize:14,
-                           lineHeight:1.6}}>
-                {c.memo}
-              </div>
-            )}
-          </div>
-
-          {/* 抄表 */}
-          <div style={card()}>
-            <span style={lbl}>本月抄表　{month}</span>
-            {m ? (
-              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12}}>
-                <span style={{fontSize:19, fontWeight:700, color:C.success}}>✓ 已抄表</span>
-                <span style={{color:C.muted, fontSize:13}}>
-                  {fmtShort(m.time)}{m.by ? "　"+m.by : ""}
-                </span>
-              </div>
-            ) : (
-              <div style={{fontSize:19, fontWeight:700, color:C.muted, marginBottom:8}}>
-                尚未抄表
-              </div>
-            )}
-
-            {(() => {
-              const d = dueInfo(c);
-              const lm = data.lastMeter?.[c.id];
-              return (
-                <div style={{fontSize:13, lineHeight:1.9, marginBottom:12,
-                             paddingTop:8, borderTop:"1px solid "+C.line}}>
-                  {d.none ? (
-                    <span style={{color:C.muted}}>尚無抄表日資料（第一次抄完就會自動記住）</span>
-                  ) : (
-                    <div style={{display:"flex", alignItems:"center", gap:8,
-                                 flexWrap:"wrap"}}>
-                      <span style={{color:C.muted}}>
-                        {d.src === "set" ? "固定抄表日：每月 " + d.day + " 號"
-                                         : "依上月推算：約 " + d.day + " 號"}
-                      </span>
-                      {!m && <DueBadge d={d}/>}
-                    </div>
-                  )}
-                  <div style={{color:C.muted}}>
-                    上次抄表：{lm ? fmtShort(lm.time) + "（" + lm.month + "）"
-                                   + (lm.by ? "　"+lm.by : "")
-                                 : "無紀錄"}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {!pick ? (
-              <div>
-                <button onClick={() => toggleMeter(c)} disabled={busy}
-                        style={btnS(m ? "light" : "accent",
-                                    {width:"100%", padding:"14px"})}>
-                  {m ? "取消抄表標記" : "標記為已抄表（現在）"}
-                </button>
-                <button onClick={() => {
-                          const t = m && parseTS(m.time);
-                          setPd(t ? month + "-" + pad(t.getDate()) : monthRange.today);
-                          setPt(t ? pad(t.getHours())+":"+pad(t.getMinutes())
-                                  : monthRange.nowTime);
-                          setPick(true);
-                        }}
-                        style={{...btnS("ghost"), width:"100%", marginTop:6,
-                                fontSize:13, textAlign:"center"}}>
-                  {m ? "修改抄表日期" : "改成自己填日期"}
-                </button>
-              </div>
-            ) : (
-              <div style={{background:C.blueBg, border:"1px solid #c5daed",
-                           borderRadius:8, padding:12}}>
-                <span style={lbl}>自行輸入抄表日期</span>
-                <div style={{display:"grid", gridTemplateColumns:"1.4fr 1fr",
-                             gap:8, marginBottom:10}}>
-                  <input type="date" value={pd}
-                         min={monthRange.min} max={monthRange.max}
-                         onChange={e => setPd(e.target.value)} style={inp()}/>
-                  <input type="time" value={pt}
-                         onChange={e => setPt(e.target.value)} style={inp()}/>
-                </div>
-                <div style={{fontSize:12, color:C.muted, marginBottom:10,
-                             lineHeight:1.7}}>
-                  只能填 {month} 這個月份內的日期。
-                  要補登別的月份，請先切換上方的月份選單。
-                </div>
-                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
-                  <button disabled={busy || !pd || !pt}
-                          onClick={async () => {
-                            const stamp = pd.replace(/-/g, "/") + " " + pt;
-                            const ok = await toggleMeter(c, {on:true, time:stamp});
-                            if(ok) setPick(false);
-                          }}
-                          style={btnS("accent",{padding:"13px"})}>確認登錄</button>
-                  <button onClick={() => setPick(false)}
-                          style={btnS("light",{padding:"13px"})}>取消</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 清潔 */}
-          <div style={card()}>
-            <span style={lbl}>深度清潔</span>
-            <div style={{fontSize:13, color:C.muted, marginBottom:10, lineHeight:1.7}}>
-              {ci.never ? "從未清潔紀錄" :
-                <>上次清潔：{parseTS(ci.last.time) ?
-                    parseTS(ci.last.time).toLocaleDateString("zh-TW") : ci.last.time}
-                 　({Math.floor(ci.ago)} 個月前{ci.last.by ? "，"+ci.last.by : ""})</>}
-            </div>
-
-            {cl ? (
-              <div>
-                <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:10}}>
-                  <span style={{fontSize:18, fontWeight:700, color:stColor}}>
-                    本月：{cl.status}
-                  </span>
-                  <span style={{color:C.muted, fontSize:13}}>{fmtShort(cl.time)}</span>
-                </div>
-                {cl.photo && <Photo id={cl.photo} link={cl.link} w={600}/>}
-                {cl.status === "退回" && (
-                  <div style={{marginTop:10, padding:10, background:"#fdecea",
-                               border:"1px solid #f5c6c0", borderRadius:8, fontSize:14}}>
-                    <b>退回原因：</b>{cl.reason || "（未填）"}
-                    <div style={{marginTop:8}}>
-                      <button onClick={() => {setPrev(page); setPage("clean");}}
-                              style={btnS("warn",{width:"100%"})}>重新拍照上傳</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : ci.ok ? (
-              <button onClick={() => {setPrev(page); setPage("clean");}}
-                      style={btnS("primary",{width:"100%", padding:"14px"})}>
-                拍照申報清潔
-              </button>
-            ) : (
-              <button disabled
-                      style={btnS("light",{width:"100%", padding:"14px",
-                                           color:C.grey, cursor:"not-allowed"})}>
-                冷卻中 · 還要約 {ci.left} 個月
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    const stColor = {
+      "已通過": C.success,
+      "待審核": C.warn,
+      "退回": C.danger
+    }[cl?.status] || C.muted;
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: c.id,
+      back: () => setCur(null)
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, c.active === false && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: "#fdecea",
+          borderColor: "#f5c6c0"
+        }),
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: C.danger,
+        fontSize: 16
+      }
+    }, "\u6B64\u5BA2\u6236\u5DF2\u9000\u79DF"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 3
+      }
+    }, "\u4E0D\u5217\u5165\u9032\u5EA6\u8207\u63D0\u9192\uFF0C\u6B77\u53F2\u7D00\u9304\u4ECD\u4FDD\u7559")), /*#__PURE__*/React.createElement("button", {
+      disabled: busy,
+      onClick: () => setActive(c, true),
+      style: btnS("accent", {
+        fontSize: 13,
+        padding: "9px 14px",
+        whiteSpace: "nowrap"
+      })
+    }, "\u5FA9\u539F")), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, c.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.muted,
+        fontSize: 14
+      }
+    }, c.owner, "\u3000\xB7\u3000", c.dist), Number(c.cycle ?? 1) !== 1 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8,
+        fontSize: 13,
+        color: C.blue
+      }
+    }, "\u6284\u8868\u9031\u671F\uFF1A", cycText(c.cycle)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginTop: 12,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPage("editClient"),
+      style: btnS("light", {
+        fontSize: 13,
+        padding: "8px 14px"
+      })
+    }, "\u7DE8\u8F2F\u8CC7\u6599"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setLabelSel([c.id]);
+        setPage("labels");
+      },
+      style: btnS("light", {
+        fontSize: 13,
+        padding: "8px 14px"
+      })
+    }, "\u5217\u5370 QR \u6A19\u7C64"), c.active !== false && /*#__PURE__*/React.createElement("button", {
+      disabled: busy,
+      onClick: () => {
+        if (confirm("確定把「" + c.name + "」標記為已退租？\n\n" + "歷史紀錄會完整保留，之後可以隨時復原。")) setActive(c, false);
+      },
+      style: btnS("light", {
+        fontSize: 13,
+        padding: "8px 14px",
+        color: C.danger
+      })
+    }, "\u6A19\u8A18\u9000\u79DF")), c.memo && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: "9px 11px",
+        background: C.warnBg,
+        border: "1px solid #f0dcb8",
+        borderRadius: 8,
+        fontSize: 14,
+        lineHeight: 1.6
+      }
+    }, c.memo)), c.active !== false && /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u672C\u6708\u6284\u8868\u3000", month), m ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 19,
+        fontWeight: 700,
+        color: C.success
+      }
+    }, "\u2713 \u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted,
+        fontSize: 13
+      }
+    }, fmtShort(m.time), m.by ? "　" + m.by : "")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 19,
+        fontWeight: 700,
+        color: C.muted,
+        marginBottom: 8
+      }
+    }, "\u5C1A\u672A\u6284\u8868"), (() => {
+      const d = dueInfo(c);
+      const lm = data.lastMeter?.[c.id];
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          lineHeight: 1.9,
+          marginBottom: 12,
+          paddingTop: 8,
+          borderTop: "1px solid " + C.line
+        }
+      }, d.none ? /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted
+        }
+      }, "\u5C1A\u7121\u6284\u8868\u65E5\u8CC7\u6599\uFF08\u7B2C\u4E00\u6B21\u6284\u5B8C\u5C31\u6703\u81EA\u52D5\u8A18\u4F4F\uFF09") : /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted
+        }
+      }, d.src === "set" ? "固定抄表日：每月 " + c.day + " 號" : "依實際紀錄推算：約 " + d.day + " 號"), /*#__PURE__*/React.createElement(DueBadge, {
+        d: d
+      })), !d.none && /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: C.muted
+        }
+      }, d.done ? "下次抄表：" : "本次應抄：", d.mon, " \u6708 ", d.day, " \u65E5", /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 6
+        }
+      }, "\uFF08", dueText(d), "\uFF09")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: C.muted
+        }
+      }, "\u4E0A\u6B21\u6284\u8868\uFF1A", lm ? fmtShort(lm.time) + "（" + lm.month + "）" + (lm.by ? "　" + lm.by : "") : "無紀錄"));
+    })(), !pick ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+      onClick: () => toggleMeter(c),
+      disabled: busy,
+      style: btnS(m ? "light" : "accent", {
+        width: "100%",
+        padding: "14px"
+      })
+    }, m ? "取消抄表標記" : "標記為已抄表（現在）"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        const t = m && parseTS(m.time);
+        setPd(t ? month + "-" + pad(t.getDate()) : monthRange.today);
+        setPt(t ? pad(t.getHours()) + ":" + pad(t.getMinutes()) : monthRange.nowTime);
+        setPick(true);
+      },
+      style: {
+        ...btnS("ghost"),
+        width: "100%",
+        marginTop: 6,
+        fontSize: 13,
+        textAlign: "center"
+      }
+    }, m ? "修改抄表日期" : "改成自己填日期")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.blueBg,
+        border: "1px solid #c5daed",
+        borderRadius: 8,
+        padding: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u81EA\u884C\u8F38\u5165\u6284\u8868\u65E5\u671F"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1.4fr 1fr",
+        gap: 8,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: pd,
+      min: monthRange.min,
+      max: monthRange.max,
+      onChange: e => setPd(e.target.value),
+      style: inp()
+    }), /*#__PURE__*/React.createElement("input", {
+      type: "time",
+      value: pt,
+      onChange: e => setPt(e.target.value),
+      style: inp()
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 10,
+        lineHeight: 1.7
+      }
+    }, "\u53EA\u80FD\u586B ", month, " \u9019\u500B\u6708\u4EFD\u5167\u7684\u65E5\u671F\u3002 \u8981\u88DC\u767B\u5225\u7684\u6708\u4EFD\uFF0C\u8ACB\u5148\u5207\u63DB\u4E0A\u65B9\u7684\u6708\u4EFD\u9078\u55AE\u3002"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: busy || !pd || !pt,
+      onClick: async () => {
+        const stamp = pd.replace(/-/g, "/") + " " + pt;
+        const ok = await toggleMeter(c, {
+          on: true,
+          time: stamp
+        });
+        if (ok) setPick(false);
+      },
+      style: btnS("accent", {
+        padding: "13px"
+      })
+    }, "\u78BA\u8A8D\u767B\u9304"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPick(false),
+      style: btnS("light", {
+        padding: "13px"
+      })
+    }, "\u53D6\u6D88")))), c.active !== false && /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6DF1\u5EA6\u6E05\u6F54"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: C.muted,
+        marginBottom: 10,
+        lineHeight: 1.7
+      }
+    }, ci.never ? "從未清潔紀錄" : /*#__PURE__*/React.createElement(React.Fragment, null, "\u4E0A\u6B21\u6E05\u6F54\uFF1A", parseTS(ci.last.time) ? parseTS(ci.last.time).toLocaleDateString("zh-TW") : ci.last.time, "\u3000(", Math.floor(ci.ago), " \u500B\u6708\u524D", ci.last.by ? "，" + ci.last.by : "", ")")), cl ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 18,
+        fontWeight: 700,
+        color: stColor
+      }
+    }, "\u672C\u6708\uFF1A", cl.status), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted,
+        fontSize: 13
+      }
+    }, fmtShort(cl.time))), cl.photo && /*#__PURE__*/React.createElement(Photo, {
+      id: cl.photo,
+      link: cl.link,
+      w: 600
+    }), cl.status === "退回" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: 10,
+        background: "#fdecea",
+        border: "1px solid #f5c6c0",
+        borderRadius: 8,
+        fontSize: 14
+      }
+    }, /*#__PURE__*/React.createElement("b", null, "\u9000\u56DE\u539F\u56E0\uFF1A"), cl.reason || "（未填）", /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPrev(page);
+        setPage("clean");
+      },
+      style: btnS("warn", {
+        width: "100%"
+      })
+    }, "\u91CD\u65B0\u62CD\u7167\u4E0A\u50B3")))) : ci.ok ? /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPrev(page);
+        setPage("clean");
+      },
+      style: btnS("primary", {
+        width: "100%",
+        padding: "14px"
+      })
+    }, "\u62CD\u7167\u7533\u5831\u6E05\u6F54") : /*#__PURE__*/React.createElement("button", {
+      disabled: true,
+      style: btnS("light", {
+        width: "100%",
+        padding: "14px",
+        color: C.grey,
+        cursor: "not-allowed"
+      })
+    }, "\u51B7\u537B\u4E2D \xB7 \u9084\u8981\u7D04 ", ci.left, " \u500B\u6708"))));
   }
 
   /* ══════ 清潔上傳 ══════ */
-  function CleanUp({id}){
+  function CleanUp({
+    id
+  }) {
     const c = byId[id];
-    const [ph, setPh]   = useState(null);
-    const [up, setUp]   = useState(false);
-    const [er, setEr]   = useState("");
-
-    async function pick(e){
+    const [ph, setPh] = useState(null);
+    const [up, setUp] = useState(false);
+    const [er, setEr] = useState("");
+    async function pick(e) {
       const f = e.target.files && e.target.files[0];
-      if(!f) return;
+      if (!f) return;
       setEr("");
       try {
-        const cap = c.name + "\n" + new Date().toLocaleString("zh-TW",{hour12:false});
+        const cap = c.name + "\n" + new Date().toLocaleString("zh-TW", {
+          hour12: false
+        });
         setPh(await processPhoto(f, cap));
-      } catch(err){ setEr(err.message); }
+      } catch (err) {
+        setEr(err.message);
+      }
     }
-
-    async function send(){
-      if(!ph) return;
-      if(!user) return setEr("請先在首頁選擇操作人員");
-      setUp(true); setEr("");
+    async function send() {
+      if (!ph) return;
+      if (!user) return setEr("請先在首頁選擇操作人員");
+      setUp(true);
+      setEr("");
       const r = await api("cleanSubmit", {
-        month, id:c.id, owner:c.owner, name:c.name,
-        photo:ph.base64, mime:"image/jpeg"
+        month,
+        id: c.id,
+        owner: c.owner,
+        name: c.name,
+        photo: ph.base64,
+        mime: "image/jpeg"
       });
       setUp(false);
-      if(!r.ok) return setEr(r.error);
-      setData(d => ({...d, clean:{...d.clean,
-        [c.id]:{time:r.time, photo:r.photo, link:r.link, status:"待審核", by:c.owner}}}));
-      setPage(prev); setCur(c.id);
+      if (!r.ok) return setEr(r.error);
+      setData(d => ({
+        ...d,
+        clean: {
+          ...d.clean,
+          [c.id]: {
+            time: r.time,
+            photo: r.photo,
+            link: r.link,
+            status: "待審核",
+            by: c.owner
+          }
+        }
+      }));
+      setPage(prev);
+      setCur(c.id);
       toast("已送出，等待主管審核");
     }
-
-    return (
-      <div>
-        <Head title="深度清潔申報" back={() => setPage(prev)}/>
-        <div style={{padding:14, display:"grid", gap:12}}>
-          <div style={card()}>
-            <div style={{fontSize:19, fontWeight:700}}>{c.name}</div>
-            <div style={{color:C.muted, fontSize:13, marginTop:4}}>
-              {c.id}　·　{c.dist}　·　{c.owner}
-            </div>
-          </div>
-
-          <div style={card()}>
-            <span style={lbl}>清潔後照片（機器內部保養）</span>
-            <div style={{fontSize:13, color:C.muted, lineHeight:1.7, marginBottom:12}}>
-              請拍攝<b>清潔完成後的機器內部</b>，需看得出實際保養部位。
-              照片會自動壓上客戶名稱與拍攝時間。
-            </div>
-
-            {ph ? (
-              <div>
-                <img src={ph.preview} alt="預覽"
-                     style={{width:"100%", borderRadius:8, border:"1px solid "+C.line}}/>
-                <div style={{fontSize:12, color:C.muted, margin:"8px 0"}}>
-                  壓縮後約 {ph.kb} KB
-                </div>
-                <label style={{...btnS("light"), display:"block", textAlign:"center"}}>
-                  重新拍照
-                  <input type="file" accept="image/*" capture="environment"
-                         onChange={pick} style={{display:"none"}}/>
-                </label>
-              </div>
-            ) : (
-              <label style={{...btnS("primary",{padding:"36px 16px", fontSize:17}),
-                             display:"block", textAlign:"center"}}>
-                📷　開啟相機拍照
-                <input type="file" accept="image/*" capture="environment"
-                       onChange={pick} style={{display:"none"}}/>
-              </label>
-            )}
-          </div>
-
-          {er && (
-            <div style={{...card({background:"#fdecea", borderColor:"#f5c6c0"}),
-                         color:C.danger, fontSize:14}}>{er}</div>
-          )}
-
-          <button onClick={send} disabled={!ph || up}
-                  style={btnS("accent",{width:"100%", padding:"16px", fontSize:17,
-                                        opacity:(!ph||up)?.45:1})}>
-            {up ? "上傳中…" : "送出申報"}
-          </button>
-        </div>
-      </div>
-    );
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "\u6DF1\u5EA6\u6E05\u6F54\u7533\u5831",
+      back: () => setPage(prev)
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 19,
+        fontWeight: 700
+      }
+    }, c.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.muted,
+        fontSize: 13,
+        marginTop: 4
+      }
+    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner)), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6E05\u6F54\u5F8C\u7167\u7247\uFF08\u6A5F\u5668\u5167\u90E8\u4FDD\u990A\uFF09"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: C.muted,
+        lineHeight: 1.7,
+        marginBottom: 12
+      }
+    }, "\u8ACB\u62CD\u651D", /*#__PURE__*/React.createElement("b", null, "\u6E05\u6F54\u5B8C\u6210\u5F8C\u7684\u6A5F\u5668\u5167\u90E8"), "\uFF0C\u9700\u770B\u5F97\u51FA\u5BE6\u969B\u4FDD\u990A\u90E8\u4F4D\u3002 \u7167\u7247\u6703\u81EA\u52D5\u58D3\u4E0A\u5BA2\u6236\u540D\u7A31\u8207\u62CD\u651D\u6642\u9593\u3002"), ph ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("img", {
+      src: ph.preview,
+      alt: "\u9810\u89BD",
+      style: {
+        width: "100%",
+        borderRadius: 8,
+        border: "1px solid " + C.line
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        margin: "8px 0"
+      }
+    }, "\u58D3\u7E2E\u5F8C\u7D04 ", ph.kb, " KB"), /*#__PURE__*/React.createElement("label", {
+      style: {
+        ...btnS("light"),
+        display: "block",
+        textAlign: "center"
+      }
+    }, "\u91CD\u65B0\u62CD\u7167", /*#__PURE__*/React.createElement("input", {
+      type: "file",
+      accept: "image/*",
+      capture: "environment",
+      onChange: pick,
+      style: {
+        display: "none"
+      }
+    }))) : /*#__PURE__*/React.createElement("label", {
+      style: {
+        ...btnS("primary", {
+          padding: "36px 16px",
+          fontSize: 17
+        }),
+        display: "block",
+        textAlign: "center"
+      }
+    }, "\uD83D\uDCF7\u3000\u958B\u555F\u76F8\u6A5F\u62CD\u7167", /*#__PURE__*/React.createElement("input", {
+      type: "file",
+      accept: "image/*",
+      capture: "environment",
+      onChange: pick,
+      style: {
+        display: "none"
+      }
+    }))), er && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: "#fdecea",
+          borderColor: "#f5c6c0"
+        }),
+        color: C.danger,
+        fontSize: 14
+      }
+    }, er), /*#__PURE__*/React.createElement("button", {
+      onClick: send,
+      disabled: !ph || up,
+      style: btnS("accent", {
+        width: "100%",
+        padding: "16px",
+        fontSize: 17,
+        opacity: !ph || up ? .45 : 1
+      })
+    }, up ? "上傳中…" : "送出申報")));
   }
 
   /* ══════ 主管審核 ══════ */
-  function Review(){
-    const [p, setP]     = useState(pin);
-    const [ok, setOk]   = useState(!!pin);
+  function Review() {
+    const [p, setP] = useState(pin);
+    const [ok, setOk] = useState(!!pin);
     const [why, setWhy] = useState({});
     const [work, setWork] = useState("");
-
-    const pend = clients
-      .filter(c => data.clean[c.id] && data.clean[c.id].status === "待審核")
-      .sort((a,b) => (data.clean[a.id].time > data.clean[b.id].time ? 1 : -1));
-
-    async function judge(c, pass){
+    const pend = clients.filter(c => data.clean[c.id] && data.clean[c.id].status === "待審核").sort((a, b) => data.clean[a.id].time > data.clean[b.id].time ? 1 : -1);
+    async function judge(c, pass) {
       setWork(c.id);
       const r = await api("review", {
-        month, id:c.id, pin:p, result:pass ? "pass" : "reject",
-        reason: pass ? "" : (why[c.id]||""), reviewer:"主管"
+        month,
+        id: c.id,
+        pin: p,
+        result: pass ? "pass" : "reject",
+        reason: pass ? "" : why[c.id] || "",
+        reviewer: "主管"
       });
       setWork("");
-      if(!r.ok) return toast("失敗：" + r.error, 5000);
-      LS.set("hz_pin", p); setPin(p);
-      setData(d => ({...d, clean:{...d.clean,
-        [c.id]:{...d.clean[c.id], status:r.status}}}));
+      if (!r.ok) return toast("失敗：" + r.error, 5000);
+      LS.set("hz_pin", p);
+      setPin(p);
+      setData(d => ({
+        ...d,
+        clean: {
+          ...d.clean,
+          [c.id]: {
+            ...d.clean[c.id],
+            status: r.status
+          }
+        }
+      }));
       toast(pass ? "已通過 ✓" : "已退回");
     }
-
-    if(!ok) return (
-      <div>
-        <Head title="主管審核" back={() => setPage("home")}/>
-        <div style={{padding:16}}>
-          <div style={card()}>
-            <span style={lbl}>請輸入主管密碼</span>
-            <input type="password" value={p} onChange={e => setP(e.target.value)}
-                   style={inp({marginBottom:12})} inputMode="numeric"/>
-            <button onClick={() => setOk(!!p)} style={btnS("primary",{width:"100%"})}>
-              進入
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-
-    return (
-      <div>
-        <Head title={"待審核　"+pend.length+" 件"} back={() => setPage("home")}/>
-        <div style={{padding:14, display:"grid", gap:12}}>
-          {pend.length === 0 && (
-            <div style={{...card(), textAlign:"center", color:C.muted, padding:30}}>
-              目前沒有待審核的清潔紀錄
-            </div>
-          )}
-          {pend.map(c => {
-            const cl = data.clean[c.id];
-            return (
-              <div key={c.id} style={card()}>
-                <div style={{fontSize:18, fontWeight:700}}>{c.name}</div>
-                <div style={{color:C.muted, fontSize:13, margin:"4px 0 10px"}}>
-                  {c.id}　·　{c.dist}　·　{c.owner}　·　{fmtShort(cl.time)}
-                </div>
-                <Photo id={cl.photo} link={cl.link} w={800}/>
-                <a href={cl.link} target="_blank" rel="noreferrer"
-                   style={{...btnS("ghost"), display:"inline-block", fontSize:13}}>
-                  開啟原始照片 ↗
-                </a>
-                <input placeholder="退回原因（退回時必填）"
-                       value={why[c.id]||""}
-                       onChange={e => setWhy(w => ({...w, [c.id]:e.target.value}))}
-                       style={inp({margin:"8px 0 10px"})}/>
-                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-                  <button disabled={work===c.id} onClick={() => judge(c, true)}
-                          style={btnS("accent",{padding:"14px"})}>通過</button>
-                  <button disabled={work===c.id || !(why[c.id]||"").trim()}
-                          onClick={() => judge(c, false)}
-                          style={btnS("red",{padding:"14px",
-                            opacity:(why[c.id]||"").trim()?1:.4})}>退回</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    if (!ok) return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "\u4E3B\u7BA1\u5BE9\u6838",
+      back: () => setPage("home")
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u8ACB\u8F38\u5165\u4E3B\u7BA1\u5BC6\u78BC"), /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      value: p,
+      onChange: e => setP(e.target.value),
+      style: inp({
+        marginBottom: 12
+      }),
+      inputMode: "numeric"
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOk(!!p),
+      style: btnS("primary", {
+        width: "100%"
+      })
+    }, "\u9032\u5165"))));
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "待審核　" + pend.length + " 件",
+      back: () => setPage("home")
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, pend.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card(),
+        textAlign: "center",
+        color: C.muted,
+        padding: 30
+      }
+    }, "\u76EE\u524D\u6C92\u6709\u5F85\u5BE9\u6838\u7684\u6E05\u6F54\u7D00\u9304"), pend.map(c => {
+      const cl = data.clean[c.id];
+      return /*#__PURE__*/React.createElement("div", {
+        key: c.id,
+        style: card()
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 18,
+          fontWeight: 700
+        }
+      }, c.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: C.muted,
+          fontSize: 13,
+          margin: "4px 0 10px"
+        }
+      }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, "\u3000\xB7\u3000", fmtShort(cl.time)), /*#__PURE__*/React.createElement(Photo, {
+        id: cl.photo,
+        link: cl.link,
+        w: 800
+      }), /*#__PURE__*/React.createElement("a", {
+        href: cl.link,
+        target: "_blank",
+        rel: "noreferrer",
+        style: {
+          ...btnS("ghost"),
+          display: "inline-block",
+          fontSize: 13
+        }
+      }, "\u958B\u555F\u539F\u59CB\u7167\u7247 \u2197"), /*#__PURE__*/React.createElement("input", {
+        placeholder: "\u9000\u56DE\u539F\u56E0\uFF08\u9000\u56DE\u6642\u5FC5\u586B\uFF09",
+        value: why[c.id] || "",
+        onChange: e => setWhy(w => ({
+          ...w,
+          [c.id]: e.target.value
+        })),
+        style: inp({
+          margin: "8px 0 10px"
+        })
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        disabled: work === c.id,
+        onClick: () => judge(c, true),
+        style: btnS("accent", {
+          padding: "14px"
+        })
+      }, "\u901A\u904E"), /*#__PURE__*/React.createElement("button", {
+        disabled: work === c.id || !(why[c.id] || "").trim(),
+        onClick: () => judge(c, false),
+        style: btnS("red", {
+          padding: "14px",
+          opacity: (why[c.id] || "").trim() ? 1 : .4
+        })
+      }, "\u9000\u56DE")));
+    })));
   }
 
   /* ══════ 月結重置 ══════ */
-  function Admin(){
-    const [p, setP]   = useState(pin);
+  function Admin() {
+    const [p, setP] = useState(pin);
     const [sc, setSc] = useState("meter");
-    const [w, setW]   = useState(false);
-
-    async function go(){
-      const names = {meter:"抄表紀錄", clean:"清潔紀錄", all:"抄表＋清潔紀錄"};
-      if(!confirm("確定清空 "+month+" 的"+names[sc]+"？此動作無法復原。")) return;
+    const [w, setW] = useState(false);
+    async function go() {
+      const names = {
+        meter: "抄表紀錄",
+        clean: "清潔紀錄",
+        all: "抄表＋清潔紀錄"
+      };
+      if (!confirm("確定清空 " + month + " 的" + names[sc] + "？此動作無法復原。")) return;
       setW(true);
-      const r = await api("resetMonth", {month, scope:sc, pin:p});
+      const r = await api("resetMonth", {
+        month,
+        scope: sc,
+        pin: p
+      });
       setW(false);
-      if(!r.ok) return toast("失敗：" + r.error, 5000);
-      LS.set("hz_pin", p); setPin(p);
-      toast("已清除 "+r.removed+" 筆");
+      if (!r.ok) return toast("失敗：" + r.error, 5000);
+      LS.set("hz_pin", p);
+      setPin(p);
+      toast("已清除 " + r.removed + " 筆");
       load(month);
     }
-
-    return (
-      <div>
-        <Head title="月結重置" back={() => setPage("home")}/>
-        <div style={{padding:14, display:"grid", gap:12}}>
-          <div style={{...card({background:C.blueBg, borderColor:"#c5daed"}),
-                       fontSize:13, lineHeight:1.8}}>
-            系統<b>本來就是按月分開記錄</b>的，換月自動從零開始，
-            平常不需要用這頁。只有當本月資料建錯、要整批重來時才用。
-          </div>
-          <div style={card()}>
-            <span style={lbl}>目標月份</span>
-            <div style={{fontSize:20, fontWeight:700, marginBottom:14}}>{month}</div>
-
-            <span style={lbl}>清除範圍</span>
-            <select value={sc} onChange={e => setSc(e.target.value)} style={inp({marginBottom:14})}>
-              <option value="meter">只清抄表紀錄</option>
-              <option value="clean">只清清潔紀錄（照片保留在雲端硬碟）</option>
-              <option value="all">全部清除</option>
-            </select>
-
-            <span style={lbl}>主管密碼</span>
-            <input type="password" value={p} onChange={e => setP(e.target.value)}
-                   style={inp({marginBottom:14})} inputMode="numeric"/>
-
-            <button onClick={go} disabled={!p || w} style={btnS("red",{width:"100%", padding:"14px"})}>
-              {w ? "處理中…" : "確認清除"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "\u6708\u7D50\u91CD\u7F6E",
+      back: () => setPage("home")
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: C.blueBg,
+          borderColor: "#c5daed"
+        }),
+        fontSize: 13,
+        lineHeight: 1.8
+      }
+    }, "\u7CFB\u7D71", /*#__PURE__*/React.createElement("b", null, "\u672C\u4F86\u5C31\u662F\u6309\u6708\u5206\u958B\u8A18\u9304"), "\u7684\uFF0C\u63DB\u6708\u81EA\u52D5\u5F9E\u96F6\u958B\u59CB\uFF0C \u5E73\u5E38\u4E0D\u9700\u8981\u7528\u9019\u9801\u3002\u53EA\u6709\u7576\u672C\u6708\u8CC7\u6599\u5EFA\u932F\u3001\u8981\u6574\u6279\u91CD\u4F86\u6642\u624D\u7528\u3002"), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u76EE\u6A19\u6708\u4EFD"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 20,
+        fontWeight: 700,
+        marginBottom: 14
+      }
+    }, month), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6E05\u9664\u7BC4\u570D"), /*#__PURE__*/React.createElement("select", {
+      value: sc,
+      onChange: e => setSc(e.target.value),
+      style: inp({
+        marginBottom: 14
+      })
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "meter"
+    }, "\u53EA\u6E05\u6284\u8868\u7D00\u9304"), /*#__PURE__*/React.createElement("option", {
+      value: "clean"
+    }, "\u53EA\u6E05\u6E05\u6F54\u7D00\u9304\uFF08\u7167\u7247\u4FDD\u7559\u5728\u96F2\u7AEF\u786C\u789F\uFF09"), /*#__PURE__*/React.createElement("option", {
+      value: "all"
+    }, "\u5168\u90E8\u6E05\u9664")), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u4E3B\u7BA1\u5BC6\u78BC"), /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      value: p,
+      onChange: e => setP(e.target.value),
+      style: inp({
+        marginBottom: 14
+      }),
+      inputMode: "numeric"
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: go,
+      disabled: !p || w,
+      style: btnS("red", {
+        width: "100%",
+        padding: "14px"
+      })
+    }, w ? "處理中…" : "確認清除"))));
   }
 
-
   /* ══════ QR 標籤列印 ══════ */
-  function Labels(){
-    const [w, setW]     = useState(Number(LS.get("hz_lw", 35)));
-    const [h, setH]     = useState(Number(LS.get("hz_lh", 25)));
-    const [mode, setMode] = useState(LS.get("hz_lmode", "page"));  // page=標籤機 / a4=A4貼紙
-    const [showName, setShowName] = useState(LS.get("hz_lname","1") === "1");
+  function Labels() {
+    const [qrReady, setQrReady] = useState(!!window.qrcode);
+    const [qrErr, setQrErr] = useState("");
+    useEffect(() => {
+      if (window.qrcode) {
+        setQrReady(true);
+        return;
+      }
+      loadLib(QRGEN_URL).then(() => setQrReady(true)).catch(() => setQrErr("QR 產生元件載入失敗，請檢查網路"));
+    }, []);
+    const [w, setW] = useState(Number(LS.get("hz_lw", 35)));
+    const [h, setH] = useState(Number(LS.get("hz_lh", 25)));
+    const [mode, setMode] = useState(LS.get("hz_lmode", "page")); // page=標籤機 / a4=A4貼紙
+    const [showName, setShowName] = useState(LS.get("hz_lname", "1") === "1");
     const [sel, setSel] = useState(() => new Set(labelSel));
-    const [lo, setLo]   = useState("全部");
-    const [ld, setLd]   = useState("全部");
-    const [lk, setLk]   = useState("");
-
+    const [lo, setLo] = useState("全部");
+    const [ld, setLd] = useState("全部");
+    const [lk, setLk] = useState("");
     const pool = clients.filter(c => {
-      if(lo !== "全部" && c.owner !== lo) return false;
-      if(ld !== "全部" && c.dist  !== ld) return false;
+      if (lo !== "全部" && c.owner !== lo) return false;
+      if (ld !== "全部" && c.dist !== ld) return false;
       const k = lk.trim();
-      if(k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
       return true;
     });
-    const poolDists = Array.from(new Set(
-      clients.filter(c => lo === "全部" || c.owner === lo).map(c => c.dist).filter(Boolean))).sort();
-
+    const poolDists = Array.from(new Set(clients.filter(c => lo === "全部" || c.owner === lo).map(c => c.dist).filter(Boolean))).sort();
     const flip = id => setSel(s => {
-      const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
     const picked = clients.filter(c => sel.has(c.id));
 
     // 版面：寬扁 → QR 左、文字右；接近正方 → QR 上、文字下
-    const pad  = Math.max(0.8, Math.min(w, h) * 0.06);
+    const pad = Math.max(0.8, Math.min(w, h) * 0.06);
     const side = w >= h * 1.25;
-    const qr   = side ? (h - pad*2) : Math.min(w - pad*2, h * 0.62);
-    const fId  = Math.max(1.8, (side ? h : h - qr) * 0.24);
-    const fNm  = fId * 0.82;
-
-    function doPrint(){
-      LS.set("hz_lw", w); LS.set("hz_lh", h);
-      LS.set("hz_lmode", mode); LS.set("hz_lname", showName ? "1" : "0");
+    const qr = side ? h - pad * 2 : Math.min(w - pad * 2, h * 0.62);
+    const fId = Math.max(1.8, (side ? h : h - qr) * 0.24);
+    const fNm = fId * 0.82;
+    function doPrint() {
+      LS.set("hz_lw", w);
+      LS.set("hz_lh", h);
+      LS.set("hz_lmode", mode);
+      LS.set("hz_lname", showName ? "1" : "0");
       const old = document.getElementById("pagerule");
-      if(old) old.remove();
+      if (old) old.remove();
       const st = document.createElement("style");
       st.id = "pagerule";
-      st.textContent = mode === "page"
-        ? "@media print{@page{size:" + w + "mm " + h + "mm;margin:0}}"
-        : "@media print{@page{size:A4;margin:8mm}}";
+      st.textContent = mode === "page" ? "@media print{@page{size:" + w + "mm " + h + "mm;margin:0}}" : "@media print{@page{size:A4;margin:8mm}}";
       document.head.appendChild(st);
       setTimeout(() => window.print(), 120);
     }
-
-    const Label = ({c}) => (
-      <div className="lbl" style={{
-            width:w+"mm", height:h+"mm", padding:pad+"mm", boxSizing:"border-box",
-            display:"flex", flexDirection:side ? "row" : "column",
-            alignItems:"center", justifyContent:side ? "flex-start" : "center",
-            gap:pad+"mm", overflow:"hidden", background:"#fff",
-            border:mode === "a4" ? "0.2mm dashed #bbb" : "0"}}>
-        <QRSvg text={c.id} size={qr+"mm"}/>
-        <div style={{minWidth:0, flex:1, textAlign:side ? "left" : "center",
-                     lineHeight:1.15, overflow:"hidden"}}>
-          <div style={{fontSize:fId+"mm", fontWeight:700, letterSpacing:"-0.02em",
-                       whiteSpace:"nowrap"}}>{c.id}</div>
-          {showName && (
-            <div style={{fontSize:fNm+"mm", marginTop:pad*0.4+"mm",
-                         display:"-webkit-box", WebkitLineClamp:2,
-                         WebkitBoxOrient:"vertical", overflow:"hidden",
-                         wordBreak:"break-all"}}>{c.name}</div>
-          )}
-        </div>
-      </div>
-    );
-
-    return (
-      <div>
-        <div className="noprint">
-          <Head title={"QR 標籤　已選 "+sel.size+" 張"} back={() => setPage("home")}/>
-        </div>
-
-        <div className="noprint" style={{padding:14, display:"grid", gap:12}}>
-          <div style={card()}>
-            <span style={lbl}>標籤尺寸（mm）</span>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
-              <div>
-                <span style={{...lbl, marginBottom:2}}>寬度</span>
-                <input type="number" value={w} min={15} max={210} step={1}
-                       onChange={e => setW(Math.max(10, Number(e.target.value)||10))}
-                       style={inp()} inputMode="decimal"/>
-              </div>
-              <div>
-                <span style={{...lbl, marginBottom:2}}>高度</span>
-                <input type="number" value={h} min={10} max={297} step={1}
-                       onChange={e => setH(Math.max(10, Number(e.target.value)||10))}
-                       style={inp()} inputMode="decimal"/>
-              </div>
-            </div>
-            <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:12}}>
-              {[[35,25],[40,30],[50,30],[30,20],[70,38]].map(([a,b]) => (
-                <button key={a+"x"+b} onClick={() => {setW(a); setH(b);}}
-                        style={btnS(w===a&&h===b ? "primary" : "light",
-                                    {padding:"6px 10px", fontSize:12})}>
-                  {a}×{b}
-                </button>
-              ))}
-            </div>
-
-            <span style={lbl}>輸出方式</span>
-            <select value={mode} onChange={e => setMode(e.target.value)} style={inp({marginBottom:12})}>
-              <option value="page">標籤機（一張標籤一頁）</option>
-              <option value="a4">A4 貼紙（整頁排版，虛線為裁切線）</option>
-            </select>
-
-            <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14}}>
-              <input type="checkbox" checked={showName}
-                     onChange={e => setShowName(e.target.checked)}
-                     style={{width:18, height:18}}/>
-              標籤上顯示客戶名稱
-            </label>
-          </div>
-
-          <div style={card()}>
-            <span style={lbl}>挑選客戶</span>
-            <input placeholder="搜尋客戶名稱或編號" value={lk}
-                   onChange={e => setLk(e.target.value)} style={inp({marginBottom:8})}/>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:10}}>
-              <select value={lo} onChange={e => {setLo(e.target.value); setLd("全部");}}
-                      style={inp({fontSize:13, padding:"8px"})}>
-                <option>全部</option>
-                {owners.map(o => <option key={o}>{o}</option>)}
-              </select>
-              <select value={ld} onChange={e => setLd(e.target.value)}
-                      style={inp({fontSize:13, padding:"8px"})}>
-                <option>全部</option>
-                {poolDists.map(d => <option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10}}>
-              <button onClick={() => setSel(s => {
-                        const n = new Set(s); pool.forEach(c => n.add(c.id)); return n;})}
-                      style={btnS("light",{fontSize:13})}>
-                全選這 {pool.length} 間
-              </button>
-              <button onClick={() => setSel(new Set())} style={btnS("light",{fontSize:13})}>
-                清空選取
-              </button>
-            </div>
-
-            <div style={{maxHeight:300, overflowY:"auto", border:"1px solid "+C.line,
-                         borderRadius:8}}>
-              {pool.map(c => (
-                <label key={c.id}
-                       style={{display:"flex", alignItems:"center", gap:10,
-                               padding:"9px 11px", borderBottom:"1px solid "+C.line,
-                               fontSize:14, cursor:"pointer",
-                               background:sel.has(c.id) ? C.blueBg : "#fff"}}>
-                  <input type="checkbox" checked={sel.has(c.id)}
-                         onChange={() => flip(c.id)} style={{width:18, height:18}}/>
-                  <span style={{fontFamily:"monospace", fontSize:12, color:C.muted}}>{c.id}</span>
-                  <span style={{whiteSpace:"nowrap", overflow:"hidden",
-                                textOverflow:"ellipsis"}}>{c.name}</span>
-                </label>
-              ))}
-              {pool.length === 0 &&
-                <div style={{padding:20, textAlign:"center", color:C.muted}}>沒有符合的客戶</div>}
-            </div>
-          </div>
-
-          <button onClick={doPrint} disabled={sel.size === 0}
-                  style={btnS("primary",{width:"100%", padding:"16px", fontSize:17,
-                                         opacity:sel.size ? 1 : .4})}>
-            列印 {sel.size} 張標籤
-          </button>
-
-          <div style={{...card({background:C.blueBg, borderColor:"#c5daed"}),
-                       fontSize:13, lineHeight:1.8}}>
-            列印對話框裡請把<b>邊界設為「無」</b>、<b>縮放設為 100%</b>，
-            並取消勾選頁首頁尾，尺寸才會準。QR 內容就是服務編號本身，
-            跟你 Excel 裡的公式產生的完全一樣，舊標籤不用換。
-          </div>
-
-          {picked.length > 0 && (
-            <div>
-              <span style={lbl}>預覽（實際列印尺寸）</span>
-              <div style={{background:"#fff", padding:10, borderRadius:8,
-                           border:"1px solid "+C.line, display:"flex",
-                           flexWrap:"wrap", gap:6, overflowX:"auto"}}>
-                {picked.slice(0,6).map(c => (
-                  <div key={c.id} style={{border:"1px dashed "+C.line}}>
-                    <Label c={c}/>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 實際送印的內容 */}
-        <div className={"lbl-sheet " + (mode === "page" ? "lbl-page" : "")}
-             style={{display:"none"}}>
-          {picked.map(c => <Label key={c.id} c={c}/>)}
-        </div>
-      </div>
-    );
+    const Label = ({
+      c
+    }) => /*#__PURE__*/React.createElement("div", {
+      className: "lbl",
+      style: {
+        width: w + "mm",
+        height: h + "mm",
+        padding: pad + "mm",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: side ? "row" : "column",
+        alignItems: "center",
+        justifyContent: side ? "flex-start" : "center",
+        gap: pad + "mm",
+        overflow: "hidden",
+        background: "#fff",
+        border: mode === "a4" ? "0.2mm dashed #bbb" : "0"
+      }
+    }, /*#__PURE__*/React.createElement(QRSvg, {
+      text: c.id,
+      size: qr + "mm",
+      ready: qrReady
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        minWidth: 0,
+        flex: 1,
+        textAlign: side ? "left" : "center",
+        lineHeight: 1.15,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: fId + "mm",
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        whiteSpace: "nowrap"
+      }
+    }, c.id), showName && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: fNm + "mm",
+        marginTop: pad * 0.4 + "mm",
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+        wordBreak: "break-all"
+      }
+    }, c.name)));
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "noprint"
+    }, /*#__PURE__*/React.createElement(Head, {
+      title: "QR 標籤　已選 " + sel.size + " 張",
+      back: () => setPage("home")
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "noprint",
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6A19\u7C64\u5C3A\u5BF8\uFF08mm\uFF09"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 10,
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        ...lbl,
+        marginBottom: 2
+      }
+    }, "\u5BEC\u5EA6"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      value: w,
+      min: 15,
+      max: 210,
+      step: 1,
+      onChange: e => setW(Math.max(10, Number(e.target.value) || 10)),
+      style: inp(),
+      inputMode: "decimal"
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        ...lbl,
+        marginBottom: 2
+      }
+    }, "\u9AD8\u5EA6"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      value: h,
+      min: 10,
+      max: 297,
+      step: 1,
+      onChange: e => setH(Math.max(10, Number(e.target.value) || 10)),
+      style: inp(),
+      inputMode: "decimal"
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap",
+        marginBottom: 12
+      }
+    }, [[35, 25], [40, 30], [50, 30], [30, 20], [70, 38]].map(([a, b]) => /*#__PURE__*/React.createElement("button", {
+      key: a + "x" + b,
+      onClick: () => {
+        setW(a);
+        setH(b);
+      },
+      style: btnS(w === a && h === b ? "primary" : "light", {
+        padding: "6px 10px",
+        fontSize: 12
+      })
+    }, a, "\xD7", b))), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u8F38\u51FA\u65B9\u5F0F"), /*#__PURE__*/React.createElement("select", {
+      value: mode,
+      onChange: e => setMode(e.target.value),
+      style: inp({
+        marginBottom: 12
+      })
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "page"
+    }, "\u6A19\u7C64\u6A5F\uFF08\u4E00\u5F35\u6A19\u7C64\u4E00\u9801\uFF09"), /*#__PURE__*/React.createElement("option", {
+      value: "a4"
+    }, "A4 \u8CBC\u7D19\uFF08\u6574\u9801\u6392\u7248\uFF0C\u865B\u7DDA\u70BA\u88C1\u5207\u7DDA\uFF09")), /*#__PURE__*/React.createElement("label", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 14
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: showName,
+      onChange: e => setShowName(e.target.checked),
+      style: {
+        width: 18,
+        height: 18
+      }
+    }), "\u6A19\u7C64\u4E0A\u986F\u793A\u5BA2\u6236\u540D\u7A31")), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6311\u9078\u5BA2\u6236"), /*#__PURE__*/React.createElement("input", {
+      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
+      value: lk,
+      onChange: e => setLk(e.target.value),
+      style: inp({
+        marginBottom: 8
+      })
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 6,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("select", {
+      value: lo,
+      onChange: e => {
+        setLo(e.target.value);
+        setLd("全部");
+      },
+      style: inp({
+        fontSize: 13,
+        padding: "8px"
+      })
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), owners.map(o => /*#__PURE__*/React.createElement("option", {
+      key: o
+    }, o))), /*#__PURE__*/React.createElement("select", {
+      value: ld,
+      onChange: e => setLd(e.target.value),
+      style: inp({
+        fontSize: 13,
+        padding: "8px"
+      })
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), poolDists.map(d => /*#__PURE__*/React.createElement("option", {
+      key: d
+    }, d)))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setSel(s => {
+        const n = new Set(s);
+        pool.forEach(c => n.add(c.id));
+        return n;
+      }),
+      style: btnS("light", {
+        fontSize: 13
+      })
+    }, "\u5168\u9078\u9019 ", pool.length, " \u9593"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setSel(new Set()),
+      style: btnS("light", {
+        fontSize: 13
+      })
+    }, "\u6E05\u7A7A\u9078\u53D6")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        maxHeight: 300,
+        overflowY: "auto",
+        border: "1px solid " + C.line,
+        borderRadius: 8
+      }
+    }, pool.map(c => /*#__PURE__*/React.createElement("label", {
+      key: c.id,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 11px",
+        borderBottom: "1px solid " + C.line,
+        fontSize: 14,
+        cursor: "pointer",
+        background: sel.has(c.id) ? C.blueBg : "#fff"
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: sel.has(c.id),
+      onChange: () => flip(c.id),
+      style: {
+        width: 18,
+        height: 18
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "monospace",
+        fontSize: 12,
+        color: C.muted
+      }
+    }, c.id), /*#__PURE__*/React.createElement("span", {
+      style: {
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, c.name))), pool.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 20,
+        textAlign: "center",
+        color: C.muted
+      }
+    }, "\u6C92\u6709\u7B26\u5408\u7684\u5BA2\u6236"))), qrErr && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: "#fdecea",
+          borderColor: "#f5c6c0"
+        }),
+        color: C.danger,
+        fontSize: 14
+      }
+    }, qrErr), !qrReady && !qrErr && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: C.blueBg,
+          borderColor: "#c5daed"
+        }),
+        fontSize: 13,
+        color: C.muted,
+        textAlign: "center"
+      }
+    }, "QR \u7522\u751F\u5143\u4EF6\u8F09\u5165\u4E2D\u2026"), /*#__PURE__*/React.createElement("button", {
+      onClick: doPrint,
+      disabled: sel.size === 0 || !qrReady,
+      style: btnS("primary", {
+        width: "100%",
+        padding: "16px",
+        fontSize: 17,
+        opacity: sel.size && qrReady ? 1 : .4
+      })
+    }, "\u5217\u5370 ", sel.size, " \u5F35\u6A19\u7C64"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: C.blueBg,
+          borderColor: "#c5daed"
+        }),
+        fontSize: 13,
+        lineHeight: 1.8
+      }
+    }, "\u5217\u5370\u5C0D\u8A71\u6846\u88E1\u8ACB\u628A", /*#__PURE__*/React.createElement("b", null, "\u908A\u754C\u8A2D\u70BA\u300C\u7121\u300D"), "\u3001", /*#__PURE__*/React.createElement("b", null, "\u7E2E\u653E\u8A2D\u70BA 100%"), "\uFF0C \u4E26\u53D6\u6D88\u52FE\u9078\u9801\u9996\u9801\u5C3E\uFF0C\u5C3A\u5BF8\u624D\u6703\u6E96\u3002QR \u5167\u5BB9\u5C31\u662F\u670D\u52D9\u7DE8\u865F\u672C\u8EAB\uFF0C \u8DDF\u4F60 Excel \u88E1\u7684\u516C\u5F0F\u7522\u751F\u7684\u5B8C\u5168\u4E00\u6A23\uFF0C\u820A\u6A19\u7C64\u4E0D\u7528\u63DB\u3002"), picked.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u9810\u89BD\uFF08\u5BE6\u969B\u5217\u5370\u5C3A\u5BF8\uFF09"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        padding: 10,
+        borderRadius: 8,
+        border: "1px solid " + C.line,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        overflowX: "auto"
+      }
+    }, picked.slice(0, 6).map(c => /*#__PURE__*/React.createElement("div", {
+      key: c.id,
+      style: {
+        border: "1px dashed " + C.line
+      }
+    }, /*#__PURE__*/React.createElement(Label, {
+      c: c
+    })))))), /*#__PURE__*/React.createElement("div", {
+      className: "lbl-sheet " + (mode === "page" ? "lbl-page" : ""),
+      style: {
+        display: "none"
+      }
+    }, picked.map(c => /*#__PURE__*/React.createElement(Label, {
+      key: c.id,
+      c: c
+    }))));
   }
 
   /* ══════ 新增 / 編輯客戶 ══════ */
-  function ClientForm({editId}){
+  function ClientForm({
+    editId
+  }) {
     const src = editId ? byId[editId] : null;
-    const [f, setF] = useState(src ? {...src} :
-      {id:"", owner:(user && user !== "其他") ? user : (owners[0] || ""),
-       dist:"", name:"", memo:"", day:""});
-    const [w, setW]   = useState(false);
+    const [f, setF] = useState(src ? {
+      ...src
+    } : {
+      id: "",
+      owner: user && user !== "其他" ? user : owners[0] || "",
+      dist: "",
+      name: "",
+      memo: "",
+      day: "",
+      cycle: 1
+    });
+    const [w, setW] = useState(false);
     const [er, setEr] = useState("");
 
     // 依負責人推算下一個可用編號
-    const suggest = useCallback((owner) => {
+    const suggest = useCallback(owner => {
       const pre = owner === "李哲倫" ? "HZ-L-" : owner === "林冠廷" ? "HZ-T-" : "";
-      if(!pre) return "";
-      const used = clients.filter(c => c.id.indexOf(pre) === 0)
-                          .map(c => parseInt(c.id.slice(pre.length), 10))
-                          .filter(n => !isNaN(n));
+      if (!pre) return "";
+      const used = clients.filter(c => c.id.indexOf(pre) === 0).map(c => parseInt(c.id.slice(pre.length), 10)).filter(n => !isNaN(n));
       const next = used.length ? Math.max.apply(null, used) + 1 : 1;
       return pre + String(next).padStart(3, "0");
     }, [clients]);
-
     useEffect(() => {
-      if(!editId && !f.id) setF(x => ({...x, id:suggest(x.owner)}));
+      if (!editId && !f.id) setF(x => ({
+        ...x,
+        id: suggest(x.owner)
+      }));
     }, [editId, f.owner, f.id, suggest]);
-
-    async function save(){
+    async function save() {
       const id = f.id.trim().toUpperCase();
-      if(!id)        return setEr("請填服務編號");
-      if(!f.name.trim()) return setEr("請填客戶名稱");
-      if(!editId && byId[id]) return setEr("編號 " + id + " 已存在（" + byId[id].name + "）");
-      setW(true); setEr("");
-      const r = await api("saveClient", {client:{
-        id, owner:f.owner.trim(), dist:f.dist.trim(),
-        name:f.name.trim(), memo:f.memo.trim(), day:f.day || ""},
-        oldId:editId || ""});
+      if (!id) return setEr("請填服務編號");
+      if (!f.name.trim()) return setEr("請填客戶名稱");
+      if (!editId && byId[id]) return setEr("編號 " + id + " 已存在（" + byId[id].name + "）");
+      setW(true);
+      setEr("");
+      const r = await api("saveClient", {
+        client: {
+          id,
+          owner: f.owner.trim(),
+          dist: f.dist.trim(),
+          name: f.name.trim(),
+          memo: f.memo.trim(),
+          day: f.day || "",
+          cycle: Number(f.cycle ?? 1),
+          active: f.active !== false
+        },
+        oldId: editId || ""
+      });
       setW(false);
-      if(!r.ok) return setEr(r.error);
+      if (!r.ok) return setEr(r.error);
       await load(month);
-      if(editId){ setPage("home"); setCur(id); toast("已更新客戶資料"); }
-      else { setLabelSel([id]); setPage("labels"); toast("已新增 " + id + "，可直接列印標籤"); }
+      if (editId) {
+        setPage("home");
+        setCur(id);
+        toast("已更新客戶資料");
+      } else {
+        setLabelSel([id]);
+        setPage("labels");
+        toast("已新增 " + id + "，可直接列印標籤");
+      }
     }
-
     const freeDists = Array.from(new Set(clients.map(c => c.dist).filter(Boolean))).sort();
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: editId ? "編輯客戶" : "新增客戶",
+      back: () => {
+        setPage(editId ? "home" : "home");
+        if (!editId) setCur(null);
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u8CA0\u8CAC\u4EBA"), /*#__PURE__*/React.createElement("select", {
+      value: f.owner,
+      onChange: e => setF({
+        ...f,
+        owner: e.target.value,
+        id: editId ? f.id : suggest(e.target.value)
+      }),
+      style: inp({
+        marginBottom: 12
+      })
+    }, owners.map(o => /*#__PURE__*/React.createElement("option", {
+      key: o
+    }, o))), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u670D\u52D9\u7DE8\u865F\uFF08QR \u5167\u5BB9\u5C31\u662F\u9019\u4E00\u4E32\uFF09"), /*#__PURE__*/React.createElement("input", {
+      value: f.id,
+      onChange: e => setF({
+        ...f,
+        id: e.target.value
+      }),
+      style: inp({
+        marginBottom: 4,
+        fontFamily: "monospace"
+      }),
+      placeholder: "HZ-L-118"
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12
+      }
+    }, "\u7CFB\u7D71\u5DF2\u81EA\u52D5\u5E36\u5165\u4E0B\u4E00\u500B\u7A7A\u865F\uFF0C\u53EF\u81EA\u884C\u4FEE\u6539"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u5BA2\u6236\u540D\u7A31"), /*#__PURE__*/React.createElement("input", {
+      value: f.name,
+      onChange: e => setF({
+        ...f,
+        name: e.target.value
+      }),
+      style: inp({
+        marginBottom: 12
+      }),
+      placeholder: "\u4F8B\uFF1A\u6C38\u61761F"
+    }), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u5340\u57DF"), /*#__PURE__*/React.createElement("input", {
+      value: f.dist,
+      onChange: e => setF({
+        ...f,
+        dist: e.target.value
+      }),
+      list: "distlist",
+      style: inp({
+        marginBottom: 12
+      }),
+      placeholder: "\u4F8B\uFF1A\u4E09\u6C11\u5340"
+    }), /*#__PURE__*/React.createElement("datalist", {
+      id: "distlist"
+    }, freeDists.map(d => /*#__PURE__*/React.createElement("option", {
+      key: d,
+      value: d
+    }))), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u6284\u8868\u9031\u671F"), /*#__PURE__*/React.createElement("select", {
+      value: Number(f.cycle ?? 1),
+      onChange: e => setF({
+        ...f,
+        cycle: Number(e.target.value)
+      }),
+      style: inp({
+        marginBottom: 4
+      })
+    }, CYCLES.map(x => /*#__PURE__*/React.createElement("option", {
+      key: x.v,
+      value: x.v
+    }, x.t))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, "\u9577\u9031\u671F\u7684\u5BA2\u6236\u53EA\u6709\u8A72\u53BB\u7684\u6708\u4EFD\u624D\u6703\u7B97\u9032\u672A\u6284\u6578\u91CF\u3002 \u9078\u300C\u4E0D\u5B9A\u671F\u300D\u7684\u5B8C\u5168\u4E0D\u5217\u5165\u7D71\u8A08\uFF0C\u4F46\u96A8\u6642\u53EF\u4EE5\u6383\u78BC\u767B\u9304\u3002"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u56FA\u5B9A\u6284\u8868\u65E5\uFF08\u6BCF\u6708\u5E7E\u865F\uFF0C\u53EF\u7559\u7A7A\uFF09"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: 1,
+      max: 31,
+      value: f.day || "",
+      onChange: e => setF({
+        ...f,
+        day: e.target.value
+      }),
+      style: inp({
+        marginBottom: 4
+      }),
+      inputMode: "numeric",
+      placeholder: "\u4F8B\uFF1A25"
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, "\u6709\u7D04\u5B9A\u65E5\u671F\u624D\u586B\u3002\u7559\u7A7A\u7684\u8A71\u7CFB\u7D71\u6703\u7528\u4E0A\u500B\u6708\u5BE6\u969B\u6284\u8868\u65E5\u63A8\u7B97\uFF0C \u4E00\u6A23\u6703\u63D0\u524D ", data.config?.lead ?? 5, " \u5929\u63D0\u9192\u3002"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("textarea", {
+      value: f.memo,
+      onChange: e => setF({
+        ...f,
+        memo: e.target.value
+      }),
+      rows: 3,
+      style: inp({
+        resize: "vertical"
+      }),
+      placeholder: "\u4F8B\uFF1A\u9001\u5E33\u55AE(\u6536\u6B3E)\u300125\u865F"
+    })), er && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: "#fdecea",
+          borderColor: "#f5c6c0"
+        }),
+        color: C.danger,
+        fontSize: 14
+      }
+    }, er), /*#__PURE__*/React.createElement("button", {
+      onClick: save,
+      disabled: w,
+      style: btnS("accent", {
+        width: "100%",
+        padding: "16px",
+        fontSize: 17
+      })
+    }, w ? "儲存中…" : editId ? "儲存變更" : "新增並產生標籤"), editId && /*#__PURE__*/React.createElement(DangerZone, {
+      c: src
+    })));
+  }
 
-    return (
-      <div>
-        <Head title={editId ? "編輯客戶" : "新增客戶"}
-              back={() => {setPage(editId ? "home" : "home"); if(!editId) setCur(null);}}/>
-        <div style={{padding:14, display:"grid", gap:12}}>
-          <div style={card()}>
-            <span style={lbl}>負責人</span>
-            <select value={f.owner}
-                    onChange={e => setF({...f, owner:e.target.value,
-                                         id:editId ? f.id : suggest(e.target.value)})}
-                    style={inp({marginBottom:12})}>
-              {owners.map(o => <option key={o}>{o}</option>)}
-            </select>
-
-            <span style={lbl}>服務編號（QR 內容就是這一串）</span>
-            <input value={f.id} onChange={e => setF({...f, id:e.target.value})}
-                   style={inp({marginBottom:4, fontFamily:"monospace"})}
-                   placeholder="HZ-L-118"/>
-            <div style={{fontSize:12, color:C.muted, marginBottom:12}}>
-              系統已自動帶入下一個空號，可自行修改
-            </div>
-
-            <span style={lbl}>客戶名稱</span>
-            <input value={f.name} onChange={e => setF({...f, name:e.target.value})}
-                   style={inp({marginBottom:12})} placeholder="例：永慶1F"/>
-
-            <span style={lbl}>區域</span>
-            <input value={f.dist} onChange={e => setF({...f, dist:e.target.value})}
-                   list="distlist" style={inp({marginBottom:12})} placeholder="例：三民區"/>
-            <datalist id="distlist">
-              {freeDists.map(d => <option key={d} value={d}/>)}
-            </datalist>
-
-            <span style={lbl}>固定抄表日（每月幾號，可留空）</span>
-            <input type="number" min={1} max={31} value={f.day || ""}
-                   onChange={e => setF({...f, day:e.target.value})}
-                   style={inp({marginBottom:4})} inputMode="numeric"
-                   placeholder="例：25"/>
-            <div style={{fontSize:12, color:C.muted, marginBottom:12, lineHeight:1.7}}>
-              有約定日期才填。留空的話系統會用上個月實際抄表日推算，
-              一樣會提前 {data.config?.lead ?? 5} 天提醒。
-            </div>
-
-            <span style={lbl}>備註</span>
-            <textarea value={f.memo} onChange={e => setF({...f, memo:e.target.value})}
-                      rows={3} style={inp({resize:"vertical"})}
-                      placeholder="例：送帳單(收款)、25號"/>
-          </div>
-
-          {er && (
-            <div style={{...card({background:"#fdecea", borderColor:"#f5c6c0"}),
-                         color:C.danger, fontSize:14}}>{er}</div>
-          )}
-
-          <button onClick={save} disabled={w}
-                  style={btnS("accent",{width:"100%", padding:"16px", fontSize:17})}>
-            {w ? "儲存中…" : (editId ? "儲存變更" : "新增並產生標籤")}
-          </button>
-        </div>
-      </div>
-    );
+  /* ══════ 永久刪除（危險區）══════ */
+  function DangerZone({
+    c
+  }) {
+    const [open, setOpen] = useState(false);
+    const [p, setP] = useState(pin);
+    const [w, setW] = useState(false);
+    const [er, setEr] = useState("");
+    async function go() {
+      if (!confirm("永久刪除「" + c.name + "」？\n\n" + "客戶資料、所有抄表紀錄、所有清潔紀錄都會一併移除，無法復原。\n" + "只是退租的話請用「標記退租」，不要用這個。")) return;
+      setW(true);
+      setEr("");
+      const r = await api("deleteClient", {
+        id: c.id,
+        pin: p
+      });
+      setW(false);
+      if (!r.ok) return setEr(r.error);
+      LS.set("hz_pin", p);
+      setPin(p);
+      await load(month);
+      setCur(null);
+      setPage("list");
+      toast("已刪除 " + c.name + "（抄表 " + r.removed.meter + " 筆、清潔 " + r.removed.clean + " 筆）", 5000);
+    }
+    if (!open) return /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOpen(true),
+      style: {
+        ...btnS("ghost"),
+        width: "100%",
+        fontSize: 13,
+        color: C.muted
+      }
+    }, "\u6C38\u4E45\u522A\u9664\u9019\u500B\u5BA2\u6236");
+    return /*#__PURE__*/React.createElement("div", {
+      style: card({
+        background: "#fdecea",
+        borderColor: "#f5c6c0"
+      })
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: C.danger,
+        fontSize: 15
+      }
+    }, "\u6C38\u4E45\u522A\u9664"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: C.text,
+        margin: "8px 0 12px",
+        lineHeight: 1.8
+      }
+    }, "\u6703\u4E00\u4F75\u79FB\u9664\u9019\u500B\u5BA2\u6236\u7684", /*#__PURE__*/React.createElement("b", null, "\u6240\u6709\u6284\u8868\u8207\u6E05\u6F54\u6B77\u53F2\u7D00\u9304"), "\uFF0C\u7121\u6CD5\u5FA9\u539F\u3002", /*#__PURE__*/React.createElement("br", null), "\u53EA\u662F\u9000\u79DF\u7684\u8A71\u8ACB\u7528\u8A73\u60C5\u9801\u7684\u300C\u6A19\u8A18\u9000\u79DF\u300D\uFF0C\u8CC7\u6599\u6703\u4FDD\u7559\u3002"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u4E3B\u7BA1\u5BC6\u78BC"), /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      value: p,
+      onChange: e => setP(e.target.value),
+      style: inp({
+        marginBottom: 12
+      }),
+      inputMode: "numeric"
+    }), er && /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.danger,
+        fontSize: 13,
+        marginBottom: 10
+      }
+    }, er), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: go,
+      disabled: !p || w,
+      style: btnS("red", {
+        padding: "13px",
+        opacity: p ? 1 : .4
+      })
+    }, w ? "刪除中…" : "確認永久刪除"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setOpen(false),
+      style: btnS("light", {
+        padding: "13px"
+      })
+    }, "\u53D6\u6D88")));
   }
 
   /* ══════ 客戶清單 ══════ */
-  function List(){
-    return (
-      <div>
-        <Head title={"客戶清單　"+listed.length+" 間"} back={() => setPage("home")}/>
-        <div style={{padding:"12px 14px", background:"#fff",
-                     borderBottom:"1px solid "+C.line, position:"sticky", top:52, zIndex:15}}>
-          <input placeholder="搜尋客戶名稱或編號" value={kw}
-                 onChange={e => setKw(e.target.value)} style={inp({marginBottom:8})}/>
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6}}>
-            <select value={fOwner} onChange={e => {setFOwner(e.target.value); setFDist("全部");}}
-                    style={inp({fontSize:13, padding:"8px"})}>
-              <option>全部</option>
-              {owners.map(o => <option key={o}>{o}</option>)}
-            </select>
-            <select value={fDist} onChange={e => setFDist(e.target.value)}
-                    style={inp({fontSize:13, padding:"8px"})}>
-              <option>全部</option>
-              {dists.map(d => <option key={d}>{d}</option>)}
-            </select>
-            <select value={fStat} onChange={e => setFStat(e.target.value)}
-                    style={inp({fontSize:13, padding:"8px"})}>
-              <option>全部</option>
-              <option>近期該抄</option>
-              <option>未抄表</option>
-              <option>已抄表</option>
-              <option>可清潔</option>
-              <option>本月已清潔</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{padding:"10px 14px 30px", display:"grid", gap:8}}>
-          {listed.map(c => {
-            const m = data.meter[c.id], cl = data.clean[c.id], ci = coolInfo(c.id);
-            return (
-              <div key={c.id} onClick={() => setCur(c.id)}
-                   style={{...card({padding:"11px 13px", cursor:"pointer",
-                          borderLeft:"4px solid "+(m ? C.success : C.line)})}}>
-                <div style={{display:"flex", justifyContent:"space-between", gap:10}}>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:16, fontWeight:600, whiteSpace:"nowrap",
-                                 overflow:"hidden", textOverflow:"ellipsis"}}>
-                      {c.name}
-                    </div>
-                    <div style={{fontSize:12, color:C.muted, marginTop:3}}>
-                      {c.id}　·　{c.dist}
-                    </div>
-                  </div>
-                  <div style={{textAlign:"right", flexShrink:0, fontSize:12}}>
-                    <div style={{color:m ? C.success : C.grey, fontWeight:600}}>
-                      {m ? "已抄表" : "未抄表"}
-                    </div>
-                    {!m && (() => { const d = dueInfo(c);
-                      return (!d.none && d.diff <= d.lead)
-                        ? <div style={{marginTop:3}}><DueBadge d={d} small/></div> : null;
-                    })()}
-                    <div style={{marginTop:3, color:cl ? C.blue : (ci.ok ? C.accent : C.grey)}}>
-                      {cl ? "清潔·"+cl.status : (ci.ok ? "可清潔" : "冷卻中")}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          {listed.length === 0 && (
-            <div style={{textAlign:"center", color:C.muted, padding:30}}>沒有符合的客戶</div>
-          )}
-        </div>
-      </div>
-    );
+  function List() {
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+      title: "客戶清單　" + listed.length + " 間",
+      back: () => setPage("home")
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "12px 14px",
+        background: "#fff",
+        borderBottom: "1px solid " + C.line,
+        position: "sticky",
+        top: 52,
+        zIndex: 15
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
+      value: kw,
+      onChange: e => setKw(e.target.value),
+      style: inp({
+        marginBottom: 8
+      })
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("select", {
+      value: fOwner,
+      onChange: e => {
+        setFOwner(e.target.value);
+        setFDist("全部");
+      },
+      style: inp({
+        fontSize: 13,
+        padding: "8px"
+      })
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), owners.map(o => /*#__PURE__*/React.createElement("option", {
+      key: o
+    }, o))), /*#__PURE__*/React.createElement("select", {
+      value: fDist,
+      onChange: e => setFDist(e.target.value),
+      style: inp({
+        fontSize: 13,
+        padding: "8px"
+      })
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), dists.map(d => /*#__PURE__*/React.createElement("option", {
+      key: d
+    }, d))), /*#__PURE__*/React.createElement("select", {
+      value: fStat,
+      onChange: e => setFStat(e.target.value),
+      style: inp({
+        fontSize: 13,
+        padding: "8px"
+      })
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u8FD1\u671F\u8A72\u6284"), /*#__PURE__*/React.createElement("option", null, "\u672A\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u53EF\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u672C\u6708\u5DF2\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u4E0D\u5B9A\u671F"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u9000\u79DF")))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "10px 14px 30px",
+        display: "grid",
+        gap: 8
+      }
+    }, listed.map(c => {
+      const m = data.meter[c.id],
+        cl = data.clean[c.id],
+        ci = coolInfo(c.id);
+      return /*#__PURE__*/React.createElement("div", {
+        key: c.id,
+        onClick: () => setCur(c.id),
+        style: {
+          ...card({
+            padding: "11px 13px",
+            cursor: "pointer",
+            borderLeft: "4px solid " + (m ? C.success : C.line)
+          })
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 16,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, c.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: C.muted,
+          marginTop: 3
+        }
+      }, c.id, "\u3000\xB7\u3000", c.dist, Number(c.cycle ?? 1) !== 1 && /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 6,
+          color: C.blue
+        }
+      }, cycText(c.cycle)))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          textAlign: "right",
+          flexShrink: 0,
+          fontSize: 12
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: c.active === false ? C.danger : m ? C.success : C.grey,
+          fontWeight: 600
+        }
+      }, c.active === false ? "已退租" : m ? "已抄表" : "未抄表"), (() => {
+        const d = dueInfo(c);
+        return !d.none && d.diff <= d.lead ? /*#__PURE__*/React.createElement("div", {
+          style: {
+            marginTop: 3
+          }
+        }, /*#__PURE__*/React.createElement(DueBadge, {
+          d: d,
+          small: true
+        })) : null;
+      })(), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginTop: 3,
+          color: cl ? C.blue : ci.ok ? C.accent : C.grey
+        }
+      }, cl ? "清潔·" + cl.status : ci.ok ? "可清潔" : "冷卻中"))));
+    }), listed.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        color: C.muted,
+        padding: 30
+      }
+    }, "\u6C92\u6709\u7B26\u5408\u7684\u5BA2\u6236")));
   }
 
   /* ══════ 首頁 ══════ */
-  function Home(){
+  function Home() {
     const monthOpts = [];
-    for(let i = 0; i < 12; i++){
-      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i);
       monthOpts.push(monthKey(d));
     }
-    const totalUnread = clients.filter(c => !data.meter[c.id]).length;
-
-    return (
-      <div>
-        <div style={{background:C.navy, color:"#fff", padding:"16px 16px 20px"}}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-            <b style={{fontSize:18}}>華芝　抄表暨清潔</b>
-            {busy && <span className="sp">◌</span>}
-          </div>
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:14}}>
-            <select value={month} onChange={e => setMonth(e.target.value)}
-                    style={inp({padding:"9px", fontSize:14})}>
-              {monthOpts.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <select value={user} onChange={e => {setUser(e.target.value); LS.set("hz_user", e.target.value);}}
-                    style={inp({padding:"9px", fontSize:14})}>
-              <option value="">選擇操作人員</option>
-              {owners.map(o => <option key={o}>{o}</option>)}
-              <option>其他</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{padding:14, display:"grid", gap:12, marginTop:-8}}>
-
-          <button onClick={() => setScan(true)}
-                  style={btnS("accent",{padding:"20px", fontSize:19, borderRadius:12,
-                                        boxShadow:"0 3px 10px rgba(47,125,93,.3)"})}>
-            掃描 QR 開始作業
-          </button>
-
-          {/* 近期該抄表 */}
-          {dueList.length > 0 && (() => {
-            const over = dueList.filter(x => x.d.state === "over").length;
-            return (
-              <div style={card({borderLeft:"4px solid "+(over ? C.danger : C.warn)})}>
-                <div style={{display:"flex", justifyContent:"space-between",
-                             alignItems:"baseline", marginBottom:10}}>
-                  <b style={{fontSize:16}}>近期該抄表</b>
-                  <span style={{fontSize:13, color:C.muted}}>
-                    {dueList.length} 間
-                    {over > 0 && <b style={{color:C.danger, marginLeft:6}}>逾期 {over}</b>}
-                  </span>
-                </div>
-
-                {dueList.slice(0, 5).map(({c, d}) => (
-                  <div key={c.id} onClick={() => setCur(c.id)}
-                       style={{display:"flex", justifyContent:"space-between",
-                               alignItems:"center", gap:10, padding:"8px 0",
-                               borderBottom:"1px solid "+C.line, cursor:"pointer"}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:15, fontWeight:600, whiteSpace:"nowrap",
-                                   overflow:"hidden", textOverflow:"ellipsis"}}>
-                        {c.name}
-                      </div>
-                      <div style={{fontSize:11, color:C.muted, marginTop:2}}>
-                        {c.dist}　·　{c.owner}
-                        {d.src === "last" && <span style={{marginLeft:4}}>（依上月推算）</span>}
-                      </div>
-                    </div>
-                    <DueBadge d={d} small/>
-                  </div>
-                ))}
-
-                <button onClick={() => {setFStat("近期該抄"); setFOwner("全部");
-                                        setFDist("全部"); setKw(""); setPage("list");}}
-                        style={btnS("light",{width:"100%", marginTop:10, fontSize:14})}>
-                  {dueList.length > 5 ? "查看全部 " + dueList.length + " 間" : "開啟完整清單"}
-                </button>
-              </div>
-            );
-          })()}
-
-          {/* 抄表進度 */}
-          <div style={card()}>
-            <div style={{display:"flex", justifyContent:"space-between",
-                         alignItems:"baseline", marginBottom:12}}>
-              <b style={{fontSize:16}}>本月抄表進度</b>
-              <span onClick={() => {setFStat("未抄表"); setFOwner("全部");
-                                    setFDist("全部"); setKw(""); setPage("list");}}
-                    style={{color:C.danger, fontWeight:700, fontSize:15, cursor:"pointer"}}>
-                還有 {totalUnread} 間未抄 ›
-              </span>
-            </div>
-            {stats && Object.keys(stats).map(k => {
-              const s = stats[k];
-              return (
-                <div key={k} style={{marginBottom:12}}>
-                  <div style={{display:"flex", justifyContent:"space-between",
-                               fontSize:14, marginBottom:5}}>
-                    <span>{k}</span>
-                    <span style={{color:C.muted}}>
-                      <b style={{color:C.text, fontSize:16}}>{s.done}</b> / {s.total}
-                      <span style={{color:C.danger, marginLeft:8}}>未抄 {s.total-s.done}</span>
-                    </span>
-                  </div>
-                  <Bar v={s.done} max={s.total} color={C.success}/>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 清潔進度 */}
-          <div style={card()}>
-            <div style={{display:"flex", justifyContent:"space-between",
-                         alignItems:"baseline", marginBottom:12}}>
-              <b style={{fontSize:16}}>本月深度清潔</b>
-              <span style={{fontSize:12, color:C.muted}}>
-                每組目標 {data.config?.goal ?? 20} 間
-              </span>
-            </div>
-            {stats && Object.keys(stats).map(k => {
-              const s = stats[k];
-              return (
-                <div key={k} style={{marginBottom:12}}>
-                  <div style={{display:"flex", justifyContent:"space-between",
-                               fontSize:14, marginBottom:5}}>
-                    <span>{k}</span>
-                    <span style={{color:C.muted}}>
-                      通過 <b style={{color:C.success, fontSize:16}}>{s.pass}</b> / {s.goal}
-                      {s.wait > 0 && <span style={{color:C.warn, marginLeft:8}}>待審 {s.wait}</span>}
-                      {s.reject > 0 && <span style={{color:C.danger, marginLeft:8}}>退回 {s.reject}</span>}
-                    </span>
-                  </div>
-                  <Bar v={s.pass} max={s.goal} color={C.blue}/>
-                </div>
-              );
-            })}
-            <button onClick={() => {setFStat("可清潔"); setFOwner(user && user!=="其他" ? user : "全部");
-                                    setFDist("全部"); setKw(""); setPage("list");}}
-                    style={btnS("light",{width:"100%", marginTop:4})}>
-              查看可清潔名單（滿 {data.config?.cool ?? 3} 個月）
-            </button>
-          </div>
-
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-            <button onClick={() => {setLabelSel([]); setPage("labels");}}
-                    style={btnS("light",{padding:"14px"})}>QR 標籤列印</button>
-            <button onClick={() => {setCur(null); setPage("addClient");}}
-                    style={btnS("light",{padding:"14px"})}>新增客戶</button>
-          </div>
-
-          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-            <button onClick={() => {setFStat("全部"); setPage("list");}}
-                    style={btnS("light",{padding:"14px"})}>客戶清單</button>
-            <button onClick={() => setPage("review")}
-                    style={btnS("light",{padding:"14px"})}>
-              主管審核
-              {stats && Object.values(stats).reduce((a,s)=>a+s.wait,0) > 0 &&
-                <span style={{marginLeft:6, background:C.warn, color:"#fff",
-                              borderRadius:99, padding:"1px 7px", fontSize:12}}>
-                  {Object.values(stats).reduce((a,s)=>a+s.wait,0)}
-                </span>}
-            </button>
-          </div>
-
-          <button onClick={() => setPage("admin")}
-                  style={{...btnS("ghost"), fontSize:13, color:C.muted}}>
-            月結重置
-          </button>
-        </div>
-      </div>
-    );
+    const totalUnread = clients.filter(c => c.active !== false && dueThisMonth(c) && !data.meter[c.id]).length;
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.navy,
+        color: "#fff",
+        padding: "16px 16px 20px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        fontSize: 18
+      }
+    }, "\u83EF\u829D\u3000\u6284\u8868\u66A8\u6E05\u6F54"), busy && /*#__PURE__*/React.createElement("span", {
+      className: "sp"
+    }, "\u25CC")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8,
+        marginTop: 14
+      }
+    }, /*#__PURE__*/React.createElement("select", {
+      value: month,
+      onChange: e => setMonth(e.target.value),
+      style: inp({
+        padding: "9px",
+        fontSize: 14
+      })
+    }, monthOpts.map(m => /*#__PURE__*/React.createElement("option", {
+      key: m,
+      value: m
+    }, m))), /*#__PURE__*/React.createElement("select", {
+      value: user,
+      onChange: e => {
+        setUser(e.target.value);
+        LS.set("hz_user", e.target.value);
+      },
+      style: inp({
+        padding: "9px",
+        fontSize: 14
+      })
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "\u9078\u64C7\u64CD\u4F5C\u4EBA\u54E1"), owners.map(o => /*#__PURE__*/React.createElement("option", {
+      key: o
+    }, o)), /*#__PURE__*/React.createElement("option", null, "\u5176\u4ED6")))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: 14,
+        display: "grid",
+        gap: 12,
+        marginTop: -8
+      }
+    }, stale > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...card({
+          background: C.warnBg,
+          borderColor: "#f0dcb8"
+        }),
+        fontSize: 13,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "\u986F\u793A\u7684\u662F ", fmtShort(new Date(stale).toLocaleString("zh-TW", {
+      hour12: false
+    })), " \u540C\u6B65\u7684\u8CC7\u6599"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => load(month, {
+        noCache: true
+      }),
+      style: btnS("light", {
+        fontSize: 12,
+        padding: "6px 12px",
+        whiteSpace: "nowrap"
+      })
+    }, "\u91CD\u65B0\u6574\u7406")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setScan(true),
+      style: btnS("accent", {
+        padding: "20px",
+        fontSize: 19,
+        borderRadius: 12,
+        boxShadow: "0 3px 10px rgba(47,125,93,.3)"
+      })
+    }, "\u6383\u63CF QR \u958B\u59CB\u4F5C\u696D"), dueList.length > 0 && (() => {
+      const over = dueList.filter(x => x.d.state === "over").length;
+      return /*#__PURE__*/React.createElement("div", {
+        style: card({
+          borderLeft: "4px solid " + (over ? C.danger : C.warn)
+        })
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 10
+        }
+      }, /*#__PURE__*/React.createElement("b", {
+        style: {
+          fontSize: 16
+        }
+      }, "\u8FD1\u671F\u8A72\u6284\u8868"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 13,
+          color: C.muted
+        }
+      }, dueList.length, " \u9593", over > 0 && /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: C.danger,
+          marginLeft: 6
+        }
+      }, "\u903E\u671F ", over))), dueList.slice(0, 5).map(({
+        c,
+        d
+      }) => /*#__PURE__*/React.createElement("div", {
+        key: c.id,
+        onClick: () => setCur(c.id),
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 0",
+          borderBottom: "1px solid " + C.line,
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 15,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, c.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: C.muted,
+          marginTop: 2
+        }
+      }, c.dist, "\u3000\xB7\u3000", c.owner, d.done && /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 4,
+          color: C.success
+        }
+      }, "\u672C\u6708\u5DF2\u6284\uFF0C\u9019\u662F\u4E0B\u6B21"), !d.done && d.src === "last" && /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 4
+        }
+      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"))), /*#__PURE__*/React.createElement(DueBadge, {
+        d: d,
+        small: true
+      }))), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setFStat("近期該抄");
+          setFOwner("全部");
+          setFDist("全部");
+          setKw("");
+          setPage("list");
+        },
+        style: btnS("light", {
+          width: "100%",
+          marginTop: 10,
+          fontSize: 14
+        })
+      }, dueList.length > 5 ? "查看全部 " + dueList.length + " 間" : "開啟完整清單"));
+    })(), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        fontSize: 16
+      }
+    }, "\u672C\u6708\u6284\u8868\u9032\u5EA6"), /*#__PURE__*/React.createElement("span", {
+      onClick: () => {
+        setFStat("未抄表");
+        setFOwner("全部");
+        setFDist("全部");
+        setKw("");
+        setPage("list");
+      },
+      style: {
+        color: C.danger,
+        fontWeight: 700,
+        fontSize: 15,
+        cursor: "pointer"
+      }
+    }, "\u9084\u6709 ", totalUnread, " \u9593\u672A\u6284 \u203A")), stats && Object.keys(stats).map(k => {
+      const s = stats[k];
+      return /*#__PURE__*/React.createElement("div", {
+        key: k,
+        style: {
+          marginBottom: 12
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 14,
+          marginBottom: 5
+        }
+      }, /*#__PURE__*/React.createElement("span", null, k), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted
+        }
+      }, /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: C.text,
+          fontSize: 16
+        }
+      }, s.done), " / ", s.total, /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.danger,
+          marginLeft: 8
+        }
+      }, "\u672A\u6284 ", s.total - s.done))), /*#__PURE__*/React.createElement(Bar, {
+        v: s.done,
+        max: s.total,
+        color: C.success
+      }), (s.adhoc > 0 || s.off > 0) && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: C.grey,
+          marginTop: 4
+        }
+      }, "\u672A\u8A08\u5165\uFF1A", s.adhoc > 0 && /*#__PURE__*/React.createElement("span", null, "\u4E0D\u5B9A\u671F ", s.adhoc, " \u9593"), s.adhoc > 0 && s.off > 0 && "、", s.off > 0 && /*#__PURE__*/React.createElement("span", null, "\u5DF2\u9000\u79DF ", s.off, " \u9593")));
+    })), /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        fontSize: 16
+      }
+    }, "\u672C\u6708\u6DF1\u5EA6\u6E05\u6F54"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: C.muted
+      }
+    }, "\u6BCF\u7D44\u76EE\u6A19 ", data.config?.goal ?? 20, " \u9593")), stats && Object.keys(stats).map(k => {
+      const s = stats[k];
+      return /*#__PURE__*/React.createElement("div", {
+        key: k,
+        style: {
+          marginBottom: 12
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 14,
+          marginBottom: 5
+        }
+      }, /*#__PURE__*/React.createElement("span", null, k), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted
+        }
+      }, "\u901A\u904E ", /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: C.success,
+          fontSize: 16
+        }
+      }, s.pass), " / ", s.goal, s.wait > 0 && /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.warn,
+          marginLeft: 8
+        }
+      }, "\u5F85\u5BE9 ", s.wait), s.reject > 0 && /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.danger,
+          marginLeft: 8
+        }
+      }, "\u9000\u56DE ", s.reject))), /*#__PURE__*/React.createElement(Bar, {
+        v: s.pass,
+        max: s.goal,
+        color: C.blue
+      }));
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setFStat("可清潔");
+        setFOwner(user && user !== "其他" ? user : "全部");
+        setFDist("全部");
+        setKw("");
+        setPage("list");
+      },
+      style: btnS("light", {
+        width: "100%",
+        marginTop: 4
+      })
+    }, "\u67E5\u770B\u53EF\u6E05\u6F54\u540D\u55AE\uFF08\u6EFF ", data.config?.cool ?? 3, " \u500B\u6708\uFF09")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setLabelSel([]);
+        setPage("labels");
+      },
+      style: btnS("light", {
+        padding: "14px"
+      })
+    }, "QR \u6A19\u7C64\u5217\u5370"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setCur(null);
+        setPage("addClient");
+      },
+      style: btnS("light", {
+        padding: "14px"
+      })
+    }, "\u65B0\u589E\u5BA2\u6236")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setFStat("全部");
+        setPage("list");
+      },
+      style: btnS("light", {
+        padding: "14px"
+      })
+    }, "\u5BA2\u6236\u6E05\u55AE"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPage("review"),
+      style: btnS("light", {
+        padding: "14px"
+      })
+    }, "\u4E3B\u7BA1\u5BE9\u6838", stats && Object.values(stats).reduce((a, s) => a + s.wait, 0) > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        background: C.warn,
+        color: "#fff",
+        borderRadius: 99,
+        padding: "1px 7px",
+        fontSize: 12
+      }
+    }, Object.values(stats).reduce((a, s) => a + s.wait, 0)))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPage("admin"),
+      style: {
+        ...btnS("ghost"),
+        fontSize: 13,
+        color: C.muted
+      }
+    }, "\u6708\u7D50\u91CD\u7F6E")));
   }
 
   /* ══════ 渲染分流 ══════ */
-  if(API_URL.indexOf("script.google.com") < 0) return (
-    <div style={{padding:24}}>
-      <div style={{...card(), lineHeight:1.9}}>
-        <b style={{fontSize:17}}>尚未設定 API 網址</b><br/>
-        請打開這個 HTML 檔，把最上方的 <code>API_URL</code> 換成你的
-        Apps Script 網頁應用程式網址（結尾是 <code>/exec</code>）。
-      </div>
-    </div>
-  );
-
-  if(!data) return (
-    <div style={{padding:40, textAlign:"center", color:C.muted}}>
-      <div className="sp" style={{fontSize:30, marginBottom:12}}>◌</div>
-      讀取中…
-      {msg && <div style={{marginTop:16, color:C.danger, fontSize:14}}>{msg}</div>}
-    </div>
-  );
-
+  if (API_URL.indexOf("script.google.com") < 0) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 24
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...card(),
+      lineHeight: 1.9
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      fontSize: 17
+    }
+  }, "\u5C1A\u672A\u8A2D\u5B9A API \u7DB2\u5740"), /*#__PURE__*/React.createElement("br", null), "\u8ACB\u6253\u958B\u9019\u500B HTML \u6A94\uFF0C\u628A\u6700\u4E0A\u65B9\u7684 ", /*#__PURE__*/React.createElement("code", null, "API_URL"), " \u63DB\u6210\u4F60\u7684 Apps Script \u7DB2\u9801\u61C9\u7528\u7A0B\u5F0F\u7DB2\u5740\uFF08\u7D50\u5C3E\u662F ", /*#__PURE__*/React.createElement("code", null, "/exec"), "\uFF09\u3002"));
+  if (!data) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 40,
+      textAlign: "center",
+      color: C.muted
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sp",
+    style: {
+      fontSize: 30,
+      marginBottom: 12
+    }
+  }, "\u25CC"), "\u8B80\u53D6\u4E2D\u2026", msg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 16,
+      color: C.danger,
+      fontSize: 14
+    }
+  }, msg));
   let body;
-  if(page === "clean" && cur)   body = <CleanUp id={cur}/>;
-  else if(page === "review")    body = <Review/>;
-  else if(page === "admin")     body = <Admin/>;
-  else if(page === "labels")    body = <Labels/>;
-  else if(page === "addClient") body = <ClientForm editId={null}/>;
-  else if(page === "editClient")body = <ClientForm editId={cur}/>;
-  else if(cur)                  body = <Detail id={cur}/>;   // 詳情蓋在清單之上
-  else if(page === "list")      body = <List/>;
-  else                          body = <Home/>;
-
-  return (
-    <div>
-      {body}
-      {scan && <Scanner onClose={() => setScan(false)}
-                        onHit={code => {setScan(false); setCur(code); setPage("home");}}/>}
-      {msg && (
-        <div style={{position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)",
-                     background:"rgba(24,34,45,.95)", color:"#fff", padding:"12px 20px",
-                     borderRadius:10, fontSize:14, zIndex:99, maxWidth:"90vw",
-                     textAlign:"center", lineHeight:1.5, pointerEvents:"none"}}>
-          {msg}
-        </div>
-      )}
-    </div>
-  );
+  if (page === "clean" && cur) body = /*#__PURE__*/React.createElement(CleanUp, {
+    id: cur
+  });else if (page === "review") body = /*#__PURE__*/React.createElement(Review, null);else if (page === "admin") body = /*#__PURE__*/React.createElement(Admin, null);else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
+    editId: null
+  });else if (page === "editClient") body = /*#__PURE__*/React.createElement(ClientForm, {
+    editId: cur
+  });else if (cur) body = /*#__PURE__*/React.createElement(Detail, {
+    id: cur
+  }); // 詳情蓋在清單之上
+  else if (page === "list") body = /*#__PURE__*/React.createElement(List, null);else body = /*#__PURE__*/React.createElement(Home, null);
+  return /*#__PURE__*/React.createElement("div", null, body, scan && /*#__PURE__*/React.createElement(Scanner, {
+    onClose: () => setScan(false),
+    onHit: code => {
+      setScan(false);
+      setCur(code);
+      setPage("home");
+    }
+  }), msg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      left: "50%",
+      bottom: 24,
+      transform: "translateX(-50%)",
+      background: "rgba(24,34,45,.95)",
+      color: "#fff",
+      padding: "12px 20px",
+      borderRadius: 10,
+      fontSize: 14,
+      zIndex: 99,
+      maxWidth: "90vw",
+      textAlign: "center",
+      lineHeight: 1.5,
+      pointerEvents: "none"
+    }
+  }, msg));
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
 </script>
 </body>
 </html>

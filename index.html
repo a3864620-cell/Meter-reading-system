@@ -336,6 +336,95 @@ function QRSvg({
   }));
 }
 
+/* ── 搜尋框：中文輸入法友善 ──
+   注音/拼音在組字過程中會不斷觸發 onChange（例如只打了「ㄋ」），
+   若直接拿去篩選，清單會一路閃成「沒有符合的客戶」。
+   這裡用 composition 事件把組字中的狀態擋掉，組完字才真的搜尋。 */
+function SearchBox({
+  value,
+  onChange,
+  placeholder,
+  style
+}) {
+  const [text, setText] = useState(value || "");
+  const composing = useRef(false);
+  const timer = useRef(null);
+  const lastPush = useRef(value || "");
+
+  // 外部主動重設（例如從首頁帶條件進來）才同步回輸入框
+  useEffect(() => {
+    if (value !== lastPush.current) {
+      setText(value || "");
+      lastPush.current = value || "";
+    }
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const push = v => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      lastPush.current = v;
+      onChange(v);
+    }, 180);
+  };
+  const clear = () => {
+    clearTimeout(timer.current);
+    composing.current = false;
+    setText("");
+    lastPush.current = "";
+    onChange("");
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: text,
+    placeholder: placeholder,
+    inputMode: "search",
+    autoComplete: "off",
+    autoCorrect: "off",
+    autoCapitalize: "off",
+    spellCheck: false,
+    style: {
+      ...style,
+      paddingRight: 38
+    },
+    onChange: e => {
+      const v = e.target.value;
+      setText(v);
+      if (!composing.current) push(v); // 組字中先不搜尋
+    },
+    onCompositionStart: () => {
+      composing.current = true;
+    },
+    onCompositionEnd: e => {
+      composing.current = false;
+      const v = e.target.value;
+      setText(v);
+      push(v);
+    }
+  }), text && /*#__PURE__*/React.createElement("button", {
+    onClick: clear,
+    "aria-label": "\u6E05\u9664",
+    style: {
+      position: "absolute",
+      right: 6,
+      top: "50%",
+      transform: "translateY(-50%)",
+      width: 28,
+      height: 28,
+      borderRadius: "50%",
+      background: "#e6ebf1",
+      color: "#5b6b7c",
+      fontSize: 15,
+      lineHeight: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\xD7"));
+}
+
 /* ══════════════════════════════════════════════════════════
    QR 掃描
    ══════════════════════════════════════════════════════════ */
@@ -1861,14 +1950,16 @@ function App() {
       style: card()
     }, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "\u6311\u9078\u5BA2\u6236"), /*#__PURE__*/React.createElement("input", {
-      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
-      value: lk,
-      onChange: e => setLk(e.target.value),
-      style: inp({
+    }, "\u6311\u9078\u5BA2\u6236"), /*#__PURE__*/React.createElement("div", {
+      style: {
         marginBottom: 8
-      })
-    }), /*#__PURE__*/React.createElement("div", {
+      }
+    }, /*#__PURE__*/React.createElement(SearchBox, {
+      value: lk,
+      onChange: setLk,
+      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
+      style: inp()
+    })), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -2355,14 +2446,16 @@ function App() {
         top: 52,
         zIndex: 15
       }
-    }, /*#__PURE__*/React.createElement("input", {
-      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
-      value: kw,
-      onChange: e => setKw(e.target.value),
-      style: inp({
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
         marginBottom: 8
-      })
-    }), /*#__PURE__*/React.createElement("div", {
+      }
+    }, /*#__PURE__*/React.createElement(SearchBox, {
+      value: kw,
+      onChange: setKw,
+      placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
+      style: inp()
+    })), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr 1fr",

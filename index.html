@@ -602,6 +602,7 @@ function App() {
   const [fOwner, setFOwner] = useState("全部");
   const [fDist, setFDist] = useState("全部");
   const [fStat, setFStat] = useState("全部");
+  const [fUrg, setFUrg] = useState("全部"); // 急迫度：逾期／今天／即將
   const [kw, setKw] = useState("");
   const toast = (t, ms = 2600) => {
     setMsg(t);
@@ -822,7 +823,8 @@ function App() {
   }, [data, clients, dueThisMonth]);
 
   /* ── 篩選後清單 ── */
-  const listed = useMemo(() => {
+  const showUrg = fStat === "近期該抄" || fStat === "未抄表";
+  const listedBase = useMemo(() => {
     const k = kw.trim();
     return clients.filter(c => {
       if (fStat === "已退租") {
@@ -846,6 +848,47 @@ function App() {
       return true;
     });
   }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo, dueThisMonth]);
+
+  /* 各急迫度的數量，直接顯示在按鈕上 */
+  const urgCount = useMemo(() => {
+    const o = {
+      全部: listedBase.length,
+      逾期: 0,
+      今天: 0,
+      即將: 0
+    };
+    listedBase.forEach(c => {
+      const d = dueInfo(c);
+      if (d.none || d.diff > d.lead) return;
+      if (d.state === "over") o.逾期++;else if (d.state === "today") o.今天++;else o.即將++;
+    });
+    return o;
+  }, [listedBase, dueInfo]);
+  const listed = useMemo(() => {
+    let arr = listedBase;
+    if (showUrg && fUrg !== "全部") {
+      const want = {
+        逾期: "over",
+        今天: "today",
+        即將: "soon"
+      }[fUrg];
+      arr = arr.filter(c => {
+        const d = dueInfo(c);
+        return !d.none && d.diff <= d.lead && d.state === want;
+      });
+    }
+    if (showUrg) {
+      // 最急的排最前面，沒有到期資料的排最後
+      arr = arr.slice().sort((a, b) => {
+        const da = dueInfo(a),
+          db = dueInfo(b);
+        const va = da.none ? 99999 : da.diff;
+        const vb = db.none ? 99999 : db.diff;
+        return va - vb;
+      });
+    }
+    return arr;
+  }, [listedBase, fUrg, showUrg, dueInfo]);
 
   /* ── 動作 ── */
   async function toggleMeter(c, opt = {}) {
@@ -2484,12 +2527,58 @@ function App() {
       key: d
     }, d))), /*#__PURE__*/React.createElement("select", {
       value: fStat,
-      onChange: e => setFStat(e.target.value),
+      onChange: e => {
+        setFStat(e.target.value);
+        setFUrg("全部");
+      },
       style: inp({
         fontSize: 13,
         padding: "8px"
       })
-    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u8FD1\u671F\u8A72\u6284"), /*#__PURE__*/React.createElement("option", null, "\u672A\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u53EF\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u672C\u6708\u5DF2\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u4E0D\u5B9A\u671F"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u9000\u79DF")))), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u8FD1\u671F\u8A72\u6284"), /*#__PURE__*/React.createElement("option", null, "\u672A\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u53EF\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u672C\u6708\u5DF2\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u4E0D\u5B9A\u671F"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u9000\u79DF"))), showUrg && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        marginTop: 8,
+        overflowX: "auto",
+        paddingBottom: 2
+      }
+    }, [{
+      k: "全部",
+      bg: "#eef1f5",
+      fg: C.text
+    }, {
+      k: "逾期",
+      bg: C.danger,
+      fg: "#fff"
+    }, {
+      k: "今天",
+      bg: C.warn,
+      fg: "#fff"
+    }, {
+      k: "即將",
+      bg: C.blue,
+      fg: "#fff"
+    }].map(x => {
+      const on = fUrg === x.k;
+      const n = urgCount[x.k] ?? 0;
+      return /*#__PURE__*/React.createElement("button", {
+        key: x.k,
+        onClick: () => setFUrg(x.k),
+        style: {
+          padding: "7px 13px",
+          borderRadius: 99,
+          fontSize: 13,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          background: on ? x.bg : "#fff",
+          color: on ? x.fg : x.k === "全部" ? C.muted : x.bg,
+          border: "1.5px solid " + (on ? x.bg : x.k === "全部" ? C.line : x.bg),
+          opacity: !on && n === 0 ? .4 : 1
+        }
+      }, x.k === "全部" ? "全部" : x.k, " ", n);
+    }))), /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "10px 14px 30px",
         display: "grid",

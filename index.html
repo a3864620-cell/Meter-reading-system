@@ -336,6 +336,53 @@ function QRSvg({
   }));
 }
 
+/* ── 文字欄位：本地暫存 + 延遲送出 ──
+   直接綁 data 的話，打字中若背景自動更新進來會把字蓋掉；
+   而且每按一鍵就存一次網路太浪費。改成停手 0.6 秒或離開欄位才送。 */
+function TextField({
+  value,
+  onCommit,
+  placeholder,
+  style
+}) {
+  const [t, setT] = useState(value || "");
+  const last = useRef(value || "");
+  const timer = useRef(null);
+  const typing = useRef(false);
+  useEffect(() => {
+    if (!typing.current && value !== last.current) {
+      setT(value || "");
+      last.current = value || "";
+    }
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const commit = v => {
+    clearTimeout(timer.current);
+    typing.current = false;
+    if (v !== last.current) {
+      last.current = v;
+      onCommit(v);
+    }
+  };
+  return /*#__PURE__*/React.createElement("input", {
+    value: t,
+    placeholder: placeholder,
+    style: style,
+    autoComplete: "off",
+    onChange: e => {
+      const v = e.target.value;
+      typing.current = true;
+      setT(v);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => commit(v), 600);
+    },
+    onCompositionStart: () => {
+      typing.current = true;
+    },
+    onBlur: e => commit(e.target.value)
+  });
+}
+
 /* ── 到期徽章文字與顏色（純函式，放模組層讓元件識別穩定） ── */
 const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
 const dueColor = d => d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
@@ -1034,11 +1081,11 @@ function BillsPage(P) {
       })
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "\u55AE\u64DA\u865F\u78BC"), /*#__PURE__*/React.createElement("input", {
+    }, "\u55AE\u64DA\u865F\u78BC"), /*#__PURE__*/React.createElement(TextField, {
       value: b.no || "",
       placeholder: "\u53EF\u7559\u7A7A",
-      onChange: e => push(c, {
-        no: e.target.value
+      onCommit: v => push(c, {
+        no: v
       }),
       style: inp({
         fontSize: 14
@@ -1061,11 +1108,11 @@ function BillsPage(P) {
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("input", {
+    }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement(TextField, {
       value: b.memo || "",
       placeholder: "\u4F8B\uFF1A\u5BA2\u6236\u8981\u6C42\u6539\u5BC4email",
-      onChange: e => push(c, {
-        memo: e.target.value
+      onCommit: v => push(c, {
+        memo: v
       }),
       style: inp({
         fontSize: 14
@@ -1104,6 +1151,7 @@ function App() {
   const [scan, setScan] = useState(false);
   const [pin, setPin] = useState(LS.get("hz_pin", ""));
   const [stale, setStale] = useState(0); // >0 表示畫面是快取資料
+  const [synced, setSynced] = useState(0); // 最後一次成功同步的時間
   const [prev, setPrev] = useState("home"); // 進清潔頁前停在哪一頁
   const [labelSel, setLabelSel] = useState([]); // 預先勾好的標籤客戶
 
@@ -1120,7 +1168,7 @@ function App() {
   const load = useCallback(async (mk, opt = {}) => {
     // 先把快取畫出來，使用者不用等網路
     let hadCache = false;
-    if (!opt.noCache) {
+    if (!opt.noCache && !opt.silent) {
       const c = cacheGet(mk);
       if (c) {
         setData(c.data);
@@ -1128,22 +1176,59 @@ function App() {
         hadCache = true;
       }
     }
-    setBusy(true);
+    if (!opt.silent) setBusy(true);
     try {
       const r = await fetch(API_URL + "?action=bootstrap&month=" + mk);
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "讀取失敗");
-      setData(j);
+      // 內容完全相同就不動 state，避免無謂重繪把使用者正在編輯的東西洗掉
+      setData(prev => {
+        try {
+          return JSON.stringify(prev) === JSON.stringify(j) ? prev : j;
+        } catch (e) {
+          return j;
+        }
+      });
       setStale(0);
+      setSynced(Date.now());
       cacheSet(mk, j);
     } catch (e) {
-      if (hadCache) toast("目前離線，顯示的是上次同步的資料", 5000);else toast("連線失敗：" + e.message, 6000);
+      if (!opt.silent) {
+        if (hadCache) toast("目前離線，顯示的是上次同步的資料", 5000);else toast("連線失敗：" + e.message, 6000);
+      }
     }
-    setBusy(false);
+    if (!opt.silent) setBusy(false);
   }, []);
   useEffect(() => {
     load(month);
   }, [month, load]);
+
+  /* 自動更新資料
+     ① 從背景切回來（手機切換 App、鎖屏後解鎖）
+     ② 網路恢復
+     ③ 開著沒動時每 90 秒 —— 這樣技師剛抄完的表這邊就看得到 */
+  useEffect(() => {
+    // 這些頁面有還沒存檔的輸入（拍好的照片、打到一半的客戶資料、勾選中的標籤），
+    // 自動更新會把它們洗掉，所以停在這些頁面時不自動更新，改用右上角手動按。
+    const HOLD = ["clean", "addClient", "editClient", "labels"];
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (HOLD.indexOf(page) >= 0) return;
+      load(month, {
+        silent: true
+      });
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    const timer = setInterval(refresh, 90000);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      clearInterval(timer);
+    };
+  }, [month, load, page]);
   const clients = data ? data.clients : [];
   const byId = useMemo(() => {
     const m = {};
@@ -1538,13 +1623,26 @@ function App() {
     style: {
       fontSize: 17
     }
-  }, title), busy && /*#__PURE__*/React.createElement("span", {
-    className: "sp",
+  }, title), /*#__PURE__*/React.createElement("button", {
+    onClick: () => load(month, {
+      noCache: true
+    }),
+    disabled: busy,
+    "aria-label": "\u91CD\u65B0\u6574\u7406",
     style: {
       marginLeft: "auto",
+      background: "rgba(255,255,255,.15)",
+      color: "#fff",
+      borderRadius: 8,
+      padding: "7px 12px",
       fontSize: 15
     }
-  }, "\u25CC"));
+  }, /*#__PURE__*/React.createElement("span", {
+    className: busy ? "sp" : "",
+    style: {
+      display: "inline-block"
+    }
+  }, "\u21BB")));
   const Bar = ({
     v,
     max,
@@ -3286,13 +3384,39 @@ function App() {
         justifyContent: "space-between",
         alignItems: "center"
       }
-    }, /*#__PURE__*/React.createElement("b", {
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", {
       style: {
         fontSize: 18
       }
-    }, "\u83EF\u829D\u3000\u6284\u8868\u66A8\u6E05\u6F54"), busy && /*#__PURE__*/React.createElement("span", {
-      className: "sp"
-    }, "\u25CC")), /*#__PURE__*/React.createElement("div", {
+    }, "\u83EF\u829D\u3000\u6284\u8868\u66A8\u6E05\u6F54"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        opacity: .75,
+        marginTop: 3
+      }
+    }, busy ? "更新中…" : synced ? "最後更新 " + new Date(synced).toLocaleTimeString("zh-TW", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit"
+    }) : "")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => load(month, {
+        noCache: true
+      }),
+      disabled: busy,
+      "aria-label": "\u91CD\u65B0\u6574\u7406",
+      style: {
+        background: "rgba(255,255,255,.15)",
+        color: "#fff",
+        borderRadius: 10,
+        padding: "10px 15px",
+        fontSize: 18
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: busy ? "sp" : "",
+      style: {
+        display: "inline-block"
+      }
+    }, "\u21BB"))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",

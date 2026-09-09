@@ -611,8 +611,17 @@ function BillsPage(P) {
     const d = new Date();
     return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate());
   };
-  const toInput = v => v ? String(v).slice(0, 10).replace(/\//g, "-") : "";
-  const toStore = v => v ? String(v).replace(/-/g, "/") : "";
+  /* 日期一律只保留 yyyy/MM/dd，避免試算表回吐的 "…… 00:00" 又被送回去 */
+  const dayOnly = v => {
+    const m = String(v || "").trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (!m) return "";
+    return m[1] + "/" + pad(m[2]) + "/" + pad(m[3]);
+  };
+  const toInput = v => {
+    const d = dayOnly(v);
+    return d ? d.replace(/\//g, "-") : "";
+  };
+  const toStore = v => dayOnly(v);
   /* 開單至今幾天（用來提示久未寄出） */
   const waitDays = v => {
     const d = parseTS(v);
@@ -679,19 +688,20 @@ function BillsPage(P) {
       ...patch
     };
     setSaving(c.id);
+    const clean = {
+      made: dayOnly(next.made),
+      no: next.no || "",
+      sent: dayOnly(next.sent),
+      back: !!next.back,
+      bdate: dayOnly(next.bdate),
+      memo: next.memo || ""
+    };
     const r = await api("saveBill", {
       month,
       id: c.id,
       owner: c.owner,
       user,
-      data: {
-        made: next.made,
-        no: next.no,
-        sent: next.sent,
-        back: !!next.back,
-        bdate: next.bdate,
-        memo: next.memo
-      }
+      data: clean
     });
     setSaving("");
     if (!r.ok) return toast("失敗：" + r.error, 5000);
@@ -851,11 +861,11 @@ function BillsPage(P) {
         color: C.muted,
         marginTop: 3
       }
-    }, b.made && /*#__PURE__*/React.createElement("span", null, "\u958B\u55AE ", String(b.made).slice(5)), b.sent && /*#__PURE__*/React.createElement("span", {
+    }, b.made && /*#__PURE__*/React.createElement("span", null, "\u958B\u55AE ", dayOnly(b.made).slice(5)), b.sent && /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 8
       }
-    }, "\u5BC4\u51FA ", String(b.sent).slice(5)), b.no && /*#__PURE__*/React.createElement("span", {
+    }, "\u5BC4\u51FA ", dayOnly(b.sent).slice(5)), b.no && /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 8
       }
@@ -921,7 +931,7 @@ function BillsPage(P) {
         marginTop: 2,
         fontSize: 13
       }
-    }, v ? v === "—" ? "不需" : String(v).slice(5) || "✓" : "—")))), b.made && !b.sent && /*#__PURE__*/React.createElement("div", {
+    }, v ? v === "—" ? "不需" : dayOnly(v).slice(5) || "✓" : "—")))), b.made && !b.sent && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.warn,

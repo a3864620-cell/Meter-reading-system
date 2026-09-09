@@ -336,6 +336,10 @@ function QRSvg({
   }));
 }
 
+/* ── 到期徽章文字與顏色（純函式，放模組層讓元件識別穩定） ── */
+const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
+const dueColor = d => d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
+
 /* ── 搜尋框：中文輸入法友善 ──
    注音/拼音在組字過程中會不斷觸發 onChange（例如只打了「ㄋ」），
    若直接拿去篩選，清單會一路閃成「沒有符合的客戶」。
@@ -581,6 +585,437 @@ function Scanner({
   }, err || "把服務編號的 QR 對準框內"));
 }
 
+/* ══════ 單據管理（助理用）══════
+ 定義在模組層而非 App 內部，元件識別才會穩定；
+ 否則 App 每次重繪都會讓這頁被拆掉重建，展開的面板會收合、捲動位置會跳。 */
+function BillsPage(P) {
+  const {
+    clients,
+    owners,
+    month,
+    data,
+    setData,
+    user,
+    billInfo,
+    setPage,
+    toast,
+    Head
+  } = P;
+  const [bo, setBo] = useState("全部");
+  const [bd, setBd] = useState("全部");
+  const [bs, setBs] = useState("待處理");
+  const [bk, setBk] = useState("");
+  const [open, setOpen] = useState(null); // 展開編輯的客戶 id
+  const [saving, setSaving] = useState("");
+  const today = () => {
+    const d = new Date();
+    return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate());
+  };
+  const toInput = v => v ? String(v).slice(0, 10).replace(/\//g, "-") : "";
+  const toStore = v => v ? String(v).replace(/-/g, "/") : "";
+  const pool = useMemo(() => {
+    const k = bk.trim();
+    let arr = clients.filter(c => {
+      if (c.active === false) return false;
+      if (bo !== "全部" && c.owner !== bo) return false;
+      if (bd !== "全部" && c.dist !== bd) return false;
+      if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      const i = billInfo(c);
+      if (bs === "待處理" && i.done) return false;
+      if (bs === "未開單" && i.st !== "未開單") return false;
+      if (bs === "已開單" && i.st !== "已開單") return false;
+      if (bs === "已寄出" && i.st !== "已寄出") return false;
+      if (bs === "已繳回" && i.st !== "已繳回") return false;
+      return true;
+    });
+    return arr.sort((a, b) => {
+      const ia = billInfo(a),
+        ib = billInfo(b);
+      const va = ia.none ? 99999 : ia.diff,
+        vb = ib.none ? 99999 : ib.diff;
+      if (va !== vb) return va - vb;
+      return a.id < b.id ? -1 : 1;
+    });
+  }, [clients, bo, bd, bs, bk, billInfo]);
+  const dists = useMemo(() => Array.from(new Set(clients.filter(c => bo === "全部" || c.owner === bo).map(c => c.dist).filter(Boolean))).sort(), [clients, bo]);
+  const tally = useMemo(() => {
+    const o = {
+      未開單: 0,
+      已開單: 0,
+      已寄出: 0,
+      已繳回: 0,
+      逾期: 0
+    };
+    clients.forEach(c => {
+      if (c.active === false) return;
+      const i = billInfo(c);
+      o[i.st] = (o[i.st] || 0) + 1;
+      if (!i.done && !i.none && i.state === "over") o.逾期++;
+    });
+    return o;
+  }, [clients, billInfo]);
+  async function push(c, patch) {
+    const i = billInfo(c);
+    const cur = i.b || {
+      made: "",
+      no: "",
+      sent: "",
+      back: false,
+      bdate: "",
+      memo: ""
+    };
+    const next = {
+      ...cur,
+      ...patch
+    };
+    setSaving(c.id);
+    const r = await api("saveBill", {
+      month,
+      id: c.id,
+      owner: c.owner,
+      user,
+      data: {
+        made: next.made,
+        no: next.no,
+        sent: next.sent,
+        back: !!next.back,
+        bdate: next.bdate,
+        memo: next.memo
+      }
+    });
+    setSaving("");
+    if (!r.ok) return toast("失敗：" + r.error, 5000);
+    setData(d => {
+      const bl = {
+        ...(d.bills || {})
+      };
+      if (r.cleared) delete bl[c.id];else bl[c.id] = next;
+      return {
+        ...d,
+        bills: bl
+      };
+    });
+  }
+  const stColor = {
+    未開單: C.grey,
+    已開單: C.warn,
+    已寄出: C.blue,
+    已繳回: C.success
+  };
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
+    title: "單據管理　" + month,
+    back: () => setPage("home")
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 14,
+      display: "grid",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: card()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(4,1fr)",
+      gap: 6,
+      textAlign: "center"
+    }
+  }, ["未開單", "已開單", "已寄出", "已繳回"].map(k => /*#__PURE__*/React.createElement("div", {
+    key: k,
+    onClick: () => setBs(k),
+    style: {
+      padding: "9px 4px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: bs === k ? stColor[k] : "#f4f6f9",
+      color: bs === k ? "#fff" : C.text
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700
+    }
+  }, tally[k]), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      marginTop: 2
+    }
+  }, k)))), tally.逾期 > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 10,
+      fontSize: 13,
+      color: C.danger,
+      fontWeight: 600
+    }
+  }, "\u6709 ", tally.逾期, " \u9593\u5DF2\u8D85\u904E\u9001\u55AE\u65E5\u9084\u6C92\u5BC4\u51FA")), /*#__PURE__*/React.createElement("div", {
+    style: card()
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement(SearchBox, {
+    value: bk,
+    onChange: setBk,
+    placeholder: "\u641C\u5C0B\u5BA2\u6236\u540D\u7A31\u6216\u7DE8\u865F",
+    style: inp()
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    value: bo,
+    onChange: e => {
+      setBo(e.target.value);
+      setBd("全部");
+    },
+    style: inp({
+      fontSize: 13,
+      padding: "8px"
+    })
+  }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), owners.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o
+  }, o))), /*#__PURE__*/React.createElement("select", {
+    value: bd,
+    onChange: e => setBd(e.target.value),
+    style: inp({
+      fontSize: 13,
+      padding: "8px"
+    })
+  }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), dists.map(d => /*#__PURE__*/React.createElement("option", {
+    key: d
+  }, d))), /*#__PURE__*/React.createElement("select", {
+    value: bs,
+    onChange: e => setBs(e.target.value),
+    style: inp({
+      fontSize: 13,
+      padding: "8px"
+    })
+  }, /*#__PURE__*/React.createElement("option", null, "\u5F85\u8655\u7406"), /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u672A\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u5BC4\u51FA"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u7E73\u56DE")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: C.muted
+    }
+  }, pool.length, " \u9593"), pool.map(c => {
+    const i = billInfo(c);
+    const b = i.b || {};
+    const isOpen = open === c.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: c.id,
+      style: card({
+        padding: 0,
+        overflow: "hidden",
+        borderLeft: "4px solid " + (i.done ? C.success : !i.none && i.state === "over" ? C.danger : C.line)
+      })
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => setOpen(isOpen ? null : c.id),
+      style: {
+        padding: "11px 13px",
+        cursor: "pointer",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 16,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, c.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 3
+      }
+    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner), (b.made || b.sent) && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 3
+      }
+    }, b.made && /*#__PURE__*/React.createElement("span", null, "\u958B\u55AE ", String(b.made).slice(5)), b.sent && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8
+      }
+    }, "\u5BC4\u51FA ", String(b.sent).slice(5)), b.no && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8
+      }
+    }, "#", b.no))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "right",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 700,
+        color: stColor[i.st]
+      }
+    }, i.st), !i.done && !i.none && i.diff <= i.lead && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: dueColor(i),
+        color: "#fff",
+        borderRadius: 99,
+        padding: "1px 7px",
+        fontSize: 11,
+        fontWeight: 600,
+        whiteSpace: "nowrap"
+      }
+    }, i.mon, "/", i.day, " \xB7 ", dueText(i))), i.none && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.grey,
+        marginTop: 4
+      }
+    }, "\u672A\u8A2D\u9001\u55AE\u65E5"))), isOpen && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "0 13px 13px",
+        borderTop: "1px solid " + C.line
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 6,
+        margin: "12px 0"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: saving === c.id,
+      onClick: () => push(c, {
+        made: today()
+      }),
+      style: btnS(b.made ? "light" : "warn", {
+        fontSize: 13,
+        padding: "11px 4px"
+      })
+    }, "\u4ECA\u5929\u958B\u55AE"), /*#__PURE__*/React.createElement("button", {
+      disabled: saving === c.id,
+      onClick: () => push(c, {
+        sent: today(),
+        made: b.made || today()
+      }),
+      style: btnS(b.sent ? "light" : "primary", {
+        fontSize: 13,
+        padding: "11px 4px"
+      })
+    }, "\u4ECA\u5929\u5BC4\u51FA"), /*#__PURE__*/React.createElement("button", {
+      disabled: saving === c.id || i.noNeed,
+      onClick: () => push(c, {
+        back: !b.back,
+        bdate: !b.back ? today() : "",
+        sent: b.sent || today(),
+        made: b.made || today()
+      }),
+      style: btnS(b.back ? "light" : "accent", {
+        fontSize: 13,
+        padding: "11px 4px",
+        opacity: i.noNeed ? .4 : 1
+      })
+    }, b.back ? "取消繳回" : "已繳回")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 10
+      }
+    }, "\u7E73\u56DE\u65B9\u5F0F\uFF1A", c.rtn, "\u3000\xB7\u3000\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u958B\u55AE\u65E5"), /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: toInput(b.made),
+      onChange: e => push(c, {
+        made: toStore(e.target.value)
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u5BC4\u51FA\u65E5"), /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: toInput(b.sent),
+      onChange: e => push(c, {
+        sent: toStore(e.target.value)
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u55AE\u64DA\u865F\u78BC"), /*#__PURE__*/React.createElement("input", {
+      value: b.no || "",
+      placeholder: "\u53EF\u7559\u7A7A",
+      onChange: e => push(c, {
+        no: e.target.value
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u7E73\u56DE\u65E5"), /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: toInput(b.bdate),
+      onChange: e => push(c, {
+        bdate: toStore(e.target.value),
+        back: !!e.target.value
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("input", {
+      value: b.memo || "",
+      placeholder: "\u4F8B\uFF1A\u5BA2\u6236\u8981\u6C42\u6539\u5BC4email",
+      onChange: e => push(c, {
+        memo: e.target.value
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    })), c.memo && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: "8px 10px",
+        background: C.warnBg,
+        border: "1px solid #f0dcb8",
+        borderRadius: 8,
+        fontSize: 13,
+        lineHeight: 1.6
+      }
+    }, "\u5BA2\u6236\u5099\u8A3B\uFF1A", c.memo)));
+  }), pool.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      color: C.muted,
+      padding: 30
+    }
+  }, "\u6C92\u6709\u7B26\u5408\u7684\u5BA2\u6236")));
+}
+
 /* ══════════════════════════════════════════════════════════
    主程式
    ══════════════════════════════════════════════════════════ */
@@ -732,6 +1167,54 @@ function App() {
       lead,
       done,
       cyc,
+      state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"
+    };
+  }, [data, month]);
+
+  /* ── 單據：送單期限判斷 ── */
+  const RTNS = ["技師繳回簽收聯", "客戶寄回回單", "技師收款後繳回", "不需繳回"];
+  const billInfo = useCallback(c => {
+    const lead = data?.config?.lead ?? 5;
+    if (c.active === false) return {
+      none: true,
+      lead,
+      inactive: true
+    };
+    const b = data?.bills?.[c.id];
+    const noNeed = (c.rtn || "") === "不需繳回";
+
+    // 狀態：未開單 → 已開單 → 已寄出 → 已繳回
+    let st = "未開單";
+    if (b) {
+      if (b.back) st = "已繳回";else if (b.sent) st = "已寄出";else if (b.made) st = "已開單";
+    }
+    const done = st === "已繳回" || noNeed && st === "已寄出";
+    const day = Number(c.bday || 0);
+    if (!day) return {
+      none: true,
+      lead,
+      st,
+      done,
+      b,
+      noNeed
+    };
+    const [yy, mm] = month.split("-").map(Number);
+    const eom = new Date(yy, mm, 0).getDate();
+    const dd = Math.min(day, eom);
+    const due = new Date(yy, mm - 1, dd);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((due - today) / 86400000);
+    return {
+      day: dd,
+      mon: mm,
+      due,
+      diff,
+      lead,
+      st,
+      done,
+      b,
+      noNeed,
       state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"
     };
   }, [data, month]);
@@ -1010,8 +1493,6 @@ function App() {
   }));
 
   /* ── 到期徽章 ── */
-  const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
-  const dueColor = d => d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
   const DueBadge = ({
     d,
     small
@@ -1153,6 +1634,12 @@ function App() {
         color: C.blue
       }
     }, "\u6284\u8868\u9031\u671F\uFF1A", cycText(c.cycle)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 6,
+        fontSize: 12,
+        color: C.muted
+      }
+    }, "\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定", "\u3000\xB7\u3000\u7E73\u56DE\uFF1A", c.rtn || "技師繳回簽收聯"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -2178,7 +2665,9 @@ function App() {
       name: "",
       memo: "",
       day: "",
-      cycle: 1
+      cycle: 1,
+      bday: "",
+      rtn: RTNS[0]
     });
     const [w, setW] = useState(false);
     const [er, setEr] = useState("");
@@ -2213,7 +2702,9 @@ function App() {
           memo: f.memo.trim(),
           day: f.day || "",
           cycle: Number(f.cycle ?? 1),
-          active: f.active !== false
+          active: f.active !== false,
+          bday: f.bday || "",
+          rtn: f.rtn || RTNS[0]
         },
         oldId: editId || ""
       });
@@ -2353,6 +2844,42 @@ function App() {
         lineHeight: 1.7
       }
     }, "\u6709\u7D04\u5B9A\u65E5\u671F\u624D\u586B\u3002\u7559\u7A7A\u7684\u8A71\u7CFB\u7D71\u6703\u7528\u4E0A\u500B\u6708\u5BE6\u969B\u6284\u8868\u65E5\u63A8\u7B97\uFF0C \u4E00\u6A23\u6703\u63D0\u524D ", data.config?.lead ?? 5, " \u5929\u63D0\u9192\u3002"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u9001\u55AE\u65E5\uFF08\u6BCF\u6708\u5E7E\u865F\u8981\u628A\u5E33\u55AE\u5BC4\u51FA\uFF0C\u53EF\u7559\u7A7A\uFF09"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: 1,
+      max: 31,
+      value: f.bday || "",
+      onChange: e => setF({
+        ...f,
+        bday: e.target.value
+      }),
+      style: inp({
+        marginBottom: 4
+      }),
+      inputMode: "numeric",
+      placeholder: "\u4F8B\uFF1A25"
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, "\u55AE\u64DA\u7BA1\u7406\u9801\u6703\u7528\u9019\u500B\u7B97\u5012\u6578\u63D0\u9192\u3002\u7559\u7A7A\u7684\u8A71\u4E0D\u6703\u63D0\u9192\uFF0C\u53EA\u986F\u793A\u72C0\u614B\u3002"), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u7E73\u56DE\u65B9\u5F0F"), /*#__PURE__*/React.createElement("select", {
+      value: f.rtn || RTNS[0],
+      onChange: e => setF({
+        ...f,
+        rtn: e.target.value
+      }),
+      style: inp({
+        marginBottom: 12
+      })
+    }, RTNS.map(x => /*#__PURE__*/React.createElement("option", {
+      key: x
+    }, x))), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("textarea", {
       value: f.memo,
@@ -2980,7 +3507,36 @@ function App() {
         width: "100%",
         marginTop: 4
       })
-    }, "\u67E5\u770B\u53EF\u6E05\u6F54\u540D\u55AE\uFF08\u6EFF ", data.config?.cool ?? 3, " \u500B\u6708\uFF09")), /*#__PURE__*/React.createElement("div", {
+    }, "\u67E5\u770B\u53EF\u6E05\u6F54\u540D\u55AE\uFF08\u6EFF ", data.config?.cool ?? 3, " \u500B\u6708\uFF09")), (() => {
+      const pend = clients.filter(c => c.active !== false && !billInfo(c).done).length;
+      const late = clients.filter(c => {
+        if (c.active === false) return false;
+        const i = billInfo(c);
+        return !i.done && !i.none && i.state === "over";
+      }).length;
+      return /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPage("bills"),
+        style: btnS("light", {
+          width: "100%",
+          padding: "16px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 16
+        })
+      }, /*#__PURE__*/React.createElement("span", null, "\u55AE\u64DA\u7BA1\u7406"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 13,
+          fontWeight: 600,
+          color: C.muted
+        }
+      }, "\u5F85\u8655\u7406 ", pend, late > 0 && /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: C.danger,
+          marginLeft: 8
+        }
+      }, "\u903E\u671F ", late)));
+    })(), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -3077,7 +3633,18 @@ function App() {
   let body;
   if (page === "clean" && cur) body = /*#__PURE__*/React.createElement(CleanUp, {
     id: cur
-  });else if (page === "review") body = /*#__PURE__*/React.createElement(Review, null);else if (page === "admin") body = /*#__PURE__*/React.createElement(Admin, null);else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
+  });else if (page === "review") body = /*#__PURE__*/React.createElement(Review, null);else if (page === "admin") body = /*#__PURE__*/React.createElement(Admin, null);else if (page === "bills") body = /*#__PURE__*/React.createElement(BillsPage, {
+    clients: clients,
+    owners: owners,
+    month: month,
+    data: data,
+    setData: setData,
+    user: user,
+    billInfo: billInfo,
+    setPage: setPage,
+    toast: toast,
+    Head: Head
+  });else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
     editId: null
   });else if (page === "editClient") body = /*#__PURE__*/React.createElement(ClientForm, {
     editId: cur

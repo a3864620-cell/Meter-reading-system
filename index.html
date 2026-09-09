@@ -613,6 +613,15 @@ function BillsPage(P) {
   };
   const toInput = v => v ? String(v).slice(0, 10).replace(/\//g, "-") : "";
   const toStore = v => v ? String(v).replace(/-/g, "/") : "";
+  /* 開單至今幾天（用來提示久未寄出） */
+  const waitDays = v => {
+    const d = parseTS(v);
+    if (!d) return 0;
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((t - d) / 86400000));
+  };
   const pool = useMemo(() => {
     const k = bk.trim();
     let arr = clients.filter(c => {
@@ -621,7 +630,8 @@ function BillsPage(P) {
       if (bd !== "全部" && c.dist !== bd) return false;
       if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
       const i = billInfo(c);
-      if (bs === "待處理" && i.done) return false;
+      // 剛完成的那筆若正展開著就先留下，方便按錯時馬上取消
+      if (bs === "待處理" && i.done && open !== c.id) return false;
       if (bs === "未開單" && i.st !== "未開單") return false;
       if (bs === "已開單" && i.st !== "已開單") return false;
       if (bs === "已寄出" && i.st !== "已寄出") return false;
@@ -636,7 +646,7 @@ function BillsPage(P) {
       if (va !== vb) return va - vb;
       return a.id < b.id ? -1 : 1;
     });
-  }, [clients, bo, bd, bs, bk, billInfo]);
+  }, [clients, bo, bd, bs, bk, billInfo, open]);
   const dists = useMemo(() => Array.from(new Set(clients.filter(c => bo === "全部" || c.owner === bo).map(c => c.dist).filter(Boolean))).sort(), [clients, bo]);
   const tally = useMemo(() => {
     const o = {
@@ -890,39 +900,93 @@ function BillsPage(P) {
         display: "grid",
         gridTemplateColumns: "1fr 1fr 1fr",
         gap: 6,
-        margin: "12px 0"
+        margin: "12px 0 8px",
+        textAlign: "center",
+        fontSize: 12
+      }
+    }, [["① 開單", b.made], ["② 寄出", b.sent], ["③ 繳回", i.noNeed ? "—" : b.back ? b.bdate || "已繳回" : ""]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+      key: k,
+      style: {
+        padding: "7px 3px",
+        borderRadius: 8,
+        background: v ? "#eaf5ee" : "#f4f6f9",
+        color: v ? C.success : C.grey
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 600
+      }
+    }, k), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 2,
+        fontSize: 13
+      }
+    }, v ? v === "—" ? "不需" : String(v).slice(5) || "✓" : "—")))), b.made && !b.sent && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.warn,
+        marginBottom: 8
+      }
+    }, "\u5DF2\u958B\u55AE ", waitDays(b.made), " \u5929\u9084\u6C92\u5BC4\u51FA"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 6,
+        marginBottom: 12
       }
     }, /*#__PURE__*/React.createElement("button", {
       disabled: saving === c.id,
-      onClick: () => push(c, {
-        made: today()
-      }),
+      onClick: () => {
+        if (b.made) {
+          if (!confirm("取消開單？\\n\\n寄出和繳回的紀錄也會一併清除。")) return;
+          push(c, {
+            made: "",
+            sent: "",
+            back: false,
+            bdate: ""
+          });
+        } else push(c, {
+          made: today()
+        });
+      },
       style: btnS(b.made ? "light" : "warn", {
         fontSize: 13,
-        padding: "11px 4px"
+        padding: "11px 4px",
+        color: b.made ? C.danger : "#fff"
       })
-    }, "\u4ECA\u5929\u958B\u55AE"), /*#__PURE__*/React.createElement("button", {
+    }, b.made ? "取消開單" : "今天開單"), /*#__PURE__*/React.createElement("button", {
       disabled: saving === c.id,
-      onClick: () => push(c, {
-        sent: today(),
-        made: b.made || today()
-      }),
+      onClick: () => {
+        if (b.sent) push(c, {
+          sent: "",
+          back: false,
+          bdate: ""
+        });else push(c, {
+          sent: today(),
+          made: b.made || today()
+        });
+      },
       style: btnS(b.sent ? "light" : "primary", {
         fontSize: 13,
-        padding: "11px 4px"
+        padding: "11px 4px",
+        color: b.sent ? C.danger : "#fff"
       })
-    }, "\u4ECA\u5929\u5BC4\u51FA"), /*#__PURE__*/React.createElement("button", {
+    }, b.sent ? "取消寄出" : "今天寄出"), /*#__PURE__*/React.createElement("button", {
       disabled: saving === c.id || i.noNeed,
-      onClick: () => push(c, {
-        back: !b.back,
-        bdate: !b.back ? today() : "",
+      onClick: () => push(c, b.back ? {
+        back: false,
+        bdate: ""
+      } : {
+        back: true,
+        bdate: today(),
         sent: b.sent || today(),
         made: b.made || today()
       }),
       style: btnS(b.back ? "light" : "accent", {
         fontSize: 13,
         padding: "11px 4px",
-        opacity: i.noNeed ? .4 : 1
+        opacity: i.noNeed ? .4 : 1,
+        color: b.back ? C.danger : "#fff"
       })
     }, b.back ? "取消繳回" : "已繳回")), /*#__PURE__*/React.createElement("div", {
       style: {

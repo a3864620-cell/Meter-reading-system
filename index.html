@@ -212,6 +212,9 @@ function cacheSet(month, data) {
 }
 
 /* ── API ── */
+/* 還在送出中的存檔數。大於 0 時背景自動更新先暫停，
+   不然更新抓回來的是存檔前的舊資料，會把剛打的字蓋回去 */
+let pendingSaves = 0;
 async function api(action, body = {}) {
   const r = await fetch(API_URL, {
     method: "POST",
@@ -338,7 +341,9 @@ function QRSvg({
 
 /* ── 文字欄位：本地暫存 + 延遲送出 ──
    直接綁 data 的話，打字中若背景自動更新進來會把字蓋掉；
-   而且每按一鍵就存一次網路太浪費。改成停手 0.6 秒或離開欄位才送。 */
+   而且每按一鍵就存一次網路太浪費。改成停手 0.6 秒或離開欄位才送。
+   ・游標還在欄位裡時，外面的資料一律不蓋進來（打到一半不會被洗掉）
+   ・注音／拼音選字中不送出，選完字才算（不會存到「ㄎㄜˋ」這種半成品） */
 function TextField({
   value,
   onCommit,
@@ -349,8 +354,10 @@ function TextField({
   const last = useRef(value || "");
   const timer = useRef(null);
   const typing = useRef(false);
+  const focused = useRef(false);
+  const composing = useRef(false);
   useEffect(() => {
-    if (!typing.current && value !== last.current) {
+    if (!focused.current && !typing.current && value !== last.current) {
       setT(value || "");
       last.current = value || "";
     }
@@ -364,22 +371,44 @@ function TextField({
       onCommit(v);
     }
   };
+  const later = v => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => commit(v), 600);
+  };
   return /*#__PURE__*/React.createElement("input", {
     value: t,
     placeholder: placeholder,
     style: style,
     autoComplete: "off",
+    onFocus: () => {
+      focused.current = true;
+    },
     onChange: e => {
       const v = e.target.value;
       typing.current = true;
       setT(v);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => commit(v), 600);
+      if (composing.current || e.nativeEvent && e.nativeEvent.isComposing) {
+        clearTimeout(timer.current); // 還在選字，先不存
+        return;
+      }
+      later(v);
     },
     onCompositionStart: () => {
+      composing.current = true;
       typing.current = true;
+      clearTimeout(timer.current);
     },
-    onBlur: e => commit(e.target.value)
+    onCompositionEnd: e => {
+      composing.current = false;
+      const v = e.target.value;
+      setT(v);
+      later(v);
+    },
+    onBlur: e => {
+      focused.current = false;
+      composing.current = false;
+      commit(e.target.value);
+    }
   });
 }
 
@@ -720,9 +749,15 @@ function BillsPage(P) {
     });
     return o;
   }, [clients, billInfo]);
+  // 每家最新的單據內容（包含還在送出中的），下一次存檔以它為底合併。
+  // 原本是拿畫面上的資料當底，前一欄還沒存完就改下一欄的話，
+  // 後面那次會用「前一欄存好之前」的舊內容整筆覆蓋回去（例如剛打的備註被清空）。
+  const latest = useRef({});
+  // 同一家的存檔排隊依序送出，後改的不會被先送出的舊內容蓋掉
+  const queue = useRef({});
   async function push(c, patch) {
     const i = billInfo(c);
-    const cur = i.b || {
+    const cur = latest.current[c.id] || i.b || {
       made: "",
       no: "",
       sent: "",
@@ -734,6 +769,7 @@ function BillsPage(P) {
       ...cur,
       ...patch
     };
+    latest.current[c.id] = next;
     setSaving(c.id);
     const clean = {
       made: dayOnly(next.made),
@@ -743,20 +779,42 @@ function BillsPage(P) {
       bdate: dayOnly(next.bdate),
       memo: next.memo || ""
     };
-    const r = await api("saveBill", {
+    pendingSaves++;
+    const job = (queue.current[c.id] || Promise.resolve()).then(() => api("saveBill", {
       month,
       id: c.id,
       owner: c.owner,
       user,
       data: clean
-    });
-    setSaving("");
-    if (!r.ok) return toast("失敗：" + r.error, 5000);
+    }));
+    const tail = job.catch(() => {});
+    queue.current[c.id] = tail;
+    let r;
+    try {
+      r = await job;
+    } catch (e) {
+      r = {
+        ok: false,
+        error: e.message || String(e)
+      };
+    }
+    pendingSaves = Math.max(0, pendingSaves - 1);
+    const isLast = queue.current[c.id] === tail; // 這家已經沒有排隊中的存檔
+    if (isLast) {
+      delete queue.current[c.id];
+      setSaving("");
+    }
+    if (!r.ok) {
+      delete latest.current[c.id];
+      return toast("失敗：" + r.error, 5000);
+    }
+    const show = latest.current[c.id] || next;
+    if (isLast) delete latest.current[c.id];
     setData(d => {
       const bl = {
         ...(d.bills || {})
       };
-      if (r.cleared) delete bl[c.id];else bl[c.id] = next;
+      if (r.cleared && show === next) delete bl[c.id];else bl[c.id] = show;
       return {
         ...d,
         bills: bl
@@ -1165,6 +1223,23 @@ function App() {
     setMsg(t);
     setTimeout(() => setMsg(""), ms);
   };
+  /* 叫修系統的「待下次送碳粉」另外抓（後端有快取 60 秒），不拖慢主要資料的載入 */
+  const [toner, setToner] = useState({
+    list: [],
+    url: ""
+  });
+  const loadToner = useCallback(async () => {
+    try {
+      const r = await fetch(API_URL + "?action=toner");
+      const j = await r.json();
+      if (!j || !j.ok) return;
+      const next = {
+        list: j.toner || [],
+        url: j.repairUrl || ""
+      };
+      setToner(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next);
+    } catch (e) {}
+  }, []);
   const load = useCallback(async (mk, opt = {}) => {
     // 先把快取畫出來，使用者不用等網路
     let hadCache = false;
@@ -1176,6 +1251,7 @@ function App() {
         hadCache = true;
       }
     }
+    loadToner(); // 同時另外抓，不等它
     if (!opt.silent) setBusy(true);
     try {
       const r = await fetch(API_URL + "?action=bootstrap&month=" + mk);
@@ -1214,6 +1290,11 @@ function App() {
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
       if (HOLD.indexOf(page) >= 0) return;
+      // 正在輸入框裡打字（包括注音選字中），或還有存檔沒送完時先不更新，
+      // 不然抓回來的舊資料會把剛打的字蓋掉。停手離開欄位後下一輪就會更新。
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
+      if (pendingSaves > 0) return;
       load(month, {
         silent: true
       });
@@ -1239,13 +1320,13 @@ function App() {
   /* ── 叫修系統的「待下次送碳粉」：後端從叫修系統讀來，這裡只負責顯示 ── */
   const tonerById = useMemo(() => {
     const m = {};
-    (data?.toner || []).forEach(t => {
+    toner.list.forEach(t => {
       (m[t.clientId] = m[t.clientId] || []).push(t);
     });
     return m;
-  }, [data]);
+  }, [toner]);
   const repairLink = t => {
-    const u = data?.repairUrl;
+    const u = toner.url;
     return u ? u + (u.indexOf("?") < 0 ? "?" : "&") + "ticket=" + encodeURIComponent(t.ticketId) : "";
   };
   const shortDay = v => {
@@ -1263,6 +1344,21 @@ function App() {
       whiteSpace: "nowrap"
     }
   }, "待送碳粉") : null;
+  // 列表裡「帶什麼碳粉」的提醒行（沒有待送碳粉的客戶回傳空陣列，什麼都不顯示）
+  const tonerLines = id => (tonerById[id] || []).map(t => {
+    const day = shortDay(t.created);
+    return /*#__PURE__*/React.createElement("div", {
+      key: t.ticketId,
+      style: {
+        fontSize: 12,
+        color: C.blue,
+        marginTop: 3,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, "叫修單 #" + t.ticketId + (t.desc ? "\u3000" + t.desc : day ? "\u3000" + day + " 登記" : ""));
+  });
   const owners = useMemo(() => {
     const s = new Set(clients.map(c => c.owner).filter(Boolean));
     return Array.from(s);
@@ -3566,96 +3662,7 @@ function App() {
         borderRadius: 12,
         boxShadow: "0 3px 10px rgba(47,125,93,.3)"
       })
-    }, "\u6383\u63CF QR \u958B\u59CB\u4F5C\u696D"), (data?.toner || []).length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: card({
-        borderLeft: "4px solid " + C.blue
-      })
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        marginBottom: 6
-      }
-    }, /*#__PURE__*/React.createElement("b", {
-      style: {
-        fontSize: 16
-      }
-    }, "待送碳粉"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 13,
-        color: C.muted
-      }
-    }, data.toner.length, " 筆")), data.toner.map(t => {
-      const c = byId[t.clientId];
-      const link = repairLink(t);
-      const day = shortDay(t.created);
-      return /*#__PURE__*/React.createElement("div", {
-        key: t.ticketId + "-" + t.clientId,
-        onClick: () => c && setCur(c.id),
-        style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 10,
-          padding: "8px 0",
-          borderBottom: "1px solid " + C.line,
-          cursor: c ? "pointer" : "default"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 15,
-          fontWeight: 600,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis"
-        }
-      }, c ? c.name : t.clientName || t.clientId), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 11,
-          color: C.muted,
-          marginTop: 2
-        }
-      }, c ? c.dist + "\u3000\xB7\u3000" + c.owner : t.clientId), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 12,
-          marginTop: 3
-        }
-      }, "叫修單 #" + t.ticketId, day ? "\u3000" + day + " 登記" : ""), t.desc && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 12,
-          color: C.muted,
-          marginTop: 2,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis"
-        }
-      }, t.desc)), link && /*#__PURE__*/React.createElement("a", {
-        href: link,
-        target: "_blank",
-        rel: "noopener",
-        onClick: e => e.stopPropagation(),
-        style: btnS("light", {
-          display: "inline-block",
-          fontSize: 12,
-          padding: "7px 10px",
-          whiteSpace: "nowrap",
-          textDecoration: "none",
-          color: C.blue,
-          flexShrink: 0
-        })
-      }, "開叫修單"));
-    }), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: C.muted,
-        marginTop: 8
-      }
-    }, "送完碳粉後，在叫修單按「已完成」，這裡就會自動消失")), dueList.length > 0 && (() => {
+    }, "\u6383\u63CF QR \u958B\u59CB\u4F5C\u696D"), dueList.length > 0 && (() => {
       const over = dueList.filter(x => x.d.state === "over").length;
       return /*#__PURE__*/React.createElement("div", {
         style: card({
@@ -3724,7 +3731,7 @@ function App() {
         style: {
           marginLeft: 4
         }
-      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id))), /*#__PURE__*/React.createElement(DueBadge, {
+      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id)), tonerLines(c.id)), /*#__PURE__*/React.createElement(DueBadge, {
         d: d,
         small: true
       }))), /*#__PURE__*/React.createElement("button", {

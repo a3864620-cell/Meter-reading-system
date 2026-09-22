@@ -1235,6 +1235,34 @@ function App() {
     clients.forEach(c => m[c.id] = c);
     return m;
   }, [clients]);
+
+  /* ── 叫修系統的「待下次送碳粉」：後端從叫修系統讀來，這裡只負責顯示 ── */
+  const tonerById = useMemo(() => {
+    const m = {};
+    (data?.toner || []).forEach(t => {
+      (m[t.clientId] = m[t.clientId] || []).push(t);
+    });
+    return m;
+  }, [data]);
+  const repairLink = t => {
+    const u = data?.repairUrl;
+    return u ? u + (u.indexOf("?") < 0 ? "?" : "&") + "ticket=" + encodeURIComponent(t.ticketId) : "";
+  };
+  const shortDay = v => {
+    const m = String(v || "").match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+    return m ? Number(m[2]) + "/" + Number(m[3]) : "";
+  };
+  const tonerTag = id => tonerById[id] ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 6,
+      padding: "1px 7px",
+      borderRadius: 999,
+      background: C.blueBg,
+      color: C.blue,
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    }
+  }, "待送碳粉") : null;
   const owners = useMemo(() => {
     const s = new Set(clients.map(c => c.owner).filter(Boolean));
     return Array.from(s);
@@ -1786,7 +1814,60 @@ function App() {
         padding: "9px 14px",
         whiteSpace: "nowrap"
       })
-    }, "\u5FA9\u539F")), /*#__PURE__*/React.createElement("div", {
+    }, "\u5FA9\u539F")), (tonerById[c.id] || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: card({
+        borderColor: "#cfe0f1",
+        background: C.blueBg,
+        borderLeft: "4px solid " + C.blue
+      })
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        color: C.blue,
+        fontSize: 16
+      }
+    }, "這次要順便送碳粉"), tonerById[c.id].map(t => {
+      const link = repairLink(t);
+      const day = shortDay(t.created);
+      return /*#__PURE__*/React.createElement("div", {
+        key: t.ticketId,
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          marginTop: 8
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0,
+          fontSize: 13
+        }
+      }, /*#__PURE__*/React.createElement("div", null, "叫修單 #" + t.ticketId, day ? "\u3000" + day + " 登記" : ""), t.desc && /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: C.muted,
+          marginTop: 2
+        }
+      }, t.desc)), link && /*#__PURE__*/React.createElement("a", {
+        href: link,
+        target: "_blank",
+        rel: "noopener",
+        style: btnS("light", {
+          display: "inline-block",
+          fontSize: 13,
+          padding: "8px 12px",
+          whiteSpace: "nowrap",
+          textDecoration: "none",
+          color: C.blue,
+          flexShrink: 0
+        })
+      }, "開叫修單結案"));
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.muted,
+        marginTop: 8
+      }
+    }, "送完後在叫修單選好碳粉、填維修內容按「已完成」，這個提醒就會消失")), /*#__PURE__*/React.createElement("div", {
       style: card()
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3326,7 +3407,7 @@ function App() {
           marginLeft: 6,
           color: C.blue
         }
-      }, cycText(c.cycle)))), /*#__PURE__*/React.createElement("div", {
+      }, cycText(c.cycle)), tonerTag(c.id))), /*#__PURE__*/React.createElement("div", {
         style: {
           textAlign: "right",
           flexShrink: 0,
@@ -3485,7 +3566,96 @@ function App() {
         borderRadius: 12,
         boxShadow: "0 3px 10px rgba(47,125,93,.3)"
       })
-    }, "\u6383\u63CF QR \u958B\u59CB\u4F5C\u696D"), dueList.length > 0 && (() => {
+    }, "\u6383\u63CF QR \u958B\u59CB\u4F5C\u696D"), (data?.toner || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: card({
+        borderLeft: "4px solid " + C.blue
+      })
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("b", {
+      style: {
+        fontSize: 16
+      }
+    }, "待送碳粉"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 13,
+        color: C.muted
+      }
+    }, data.toner.length, " 筆")), data.toner.map(t => {
+      const c = byId[t.clientId];
+      const link = repairLink(t);
+      const day = shortDay(t.created);
+      return /*#__PURE__*/React.createElement("div", {
+        key: t.ticketId + "-" + t.clientId,
+        onClick: () => c && setCur(c.id),
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 0",
+          borderBottom: "1px solid " + C.line,
+          cursor: c ? "pointer" : "default"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 15,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, c ? c.name : t.clientName || t.clientId), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: C.muted,
+          marginTop: 2
+        }
+      }, c ? c.dist + "\u3000\xB7\u3000" + c.owner : t.clientId), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          marginTop: 3
+        }
+      }, "叫修單 #" + t.ticketId, day ? "\u3000" + day + " 登記" : ""), t.desc && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: C.muted,
+          marginTop: 2,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, t.desc)), link && /*#__PURE__*/React.createElement("a", {
+        href: link,
+        target: "_blank",
+        rel: "noopener",
+        onClick: e => e.stopPropagation(),
+        style: btnS("light", {
+          display: "inline-block",
+          fontSize: 12,
+          padding: "7px 10px",
+          whiteSpace: "nowrap",
+          textDecoration: "none",
+          color: C.blue,
+          flexShrink: 0
+        })
+      }, "開叫修單"));
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.muted,
+        marginTop: 8
+      }
+    }, "送完碳粉後，在叫修單按「已完成」，這裡就會自動消失")), dueList.length > 0 && (() => {
       const over = dueList.filter(x => x.d.state === "over").length;
       return /*#__PURE__*/React.createElement("div", {
         style: card({
@@ -3554,7 +3724,7 @@ function App() {
         style: {
           marginLeft: 4
         }
-      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"))), /*#__PURE__*/React.createElement(DueBadge, {
+      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id))), /*#__PURE__*/React.createElement(DueBadge, {
         d: d,
         small: true
       }))), /*#__PURE__*/React.createElement("button", {

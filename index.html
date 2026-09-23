@@ -221,6 +221,43 @@ let pendingSaves = 0;
 let saveQueue = Promise.resolve();
 const billLatest = {};
 const billPending = {};
+/* 本機已經做了、但還不確定伺服器資料有沒有反映的變更（抄表打勾／取消、單據）。
+   存檔完成後不會馬上丟掉：要等到「存檔完成之後才開始讀」的那一份資料回來，
+   才確定伺服器已經有了。不然存檔前就開始讀的舊資料回來，會把剛打的勾洗掉。 */
+const pendingMeter = {};
+const billDone = {};
+const KEEP_MS = 600000; // 超過 10 分鐘還沒等到，就不再蓋（避免永遠留著）
+function applyPending_(j, mk, reqAt) {
+  const m = { ...(j.meter || {}) };
+  let hitM = false;
+  Object.keys(pendingMeter).forEach(k => {
+    const e = pendingMeter[k];
+    if (e.done && (e.done < reqAt || Date.now() - e.done > KEEP_MS)) {
+      delete pendingMeter[k]; // 這份資料是存好之後才讀的，伺服器已經有了
+      return;
+    }
+    if (k.split("|")[0] !== mk) return;
+    hitM = true;
+    const id = k.split("|")[1];
+    if (e.v) m[id] = e.v;else delete m[id];
+  });
+  if (hitM) j.meter = m;
+  const b = { ...(j.bills || {}) };
+  let hitB = false;
+  Object.keys(billLatest).forEach(k => {
+    const done = billDone[k];
+    if (done && (done < reqAt || Date.now() - done > KEEP_MS)) {
+      delete billLatest[k];
+      delete billDone[k];
+      return;
+    }
+    if (k.split("|")[0] !== mk) return;
+    hitB = true;
+    b[k.split("|")[1]] = billLatest[k];
+  });
+  if (hitB) j.bills = b;
+  return j;
+}
 window.addEventListener("beforeunload", e => {
   if (pendingSaves > 0) {
     e.preventDefault(); // 還有資料沒存完就要關網頁 → 瀏覽器會先問一下
@@ -830,7 +867,7 @@ function BillsPage(P) {
     billPending[key] = Math.max(0, (billPending[key] || 1) - 1);
     if (!billPending[key]) {
       delete billPending[key];
-      delete billLatest[key];
+      billDone[key] = Date.now(); // 先留著，等確定伺服器資料已經包含它再丟
       setSaving(s => {
         const o = {
           ...s
@@ -841,6 +878,7 @@ function BillsPage(P) {
     }
     if (!r || !r.ok) {
       delete billLatest[key];
+      delete billDone[key];
       toast("存檔失敗：" + (r && r.error || "連線中斷") + "，已重新讀取，請再按一次", 6000);
       if (pendingSaves === 0 && P.reload) P.reload();
     }
@@ -1279,12 +1317,14 @@ function App() {
         hadCache = true;
       }
     }
+    const reqAt = Date.now(); // 這份資料是什麼時候開始讀的（用來判斷它有沒有包含剛存好的東西）
     loadToner(); // 同時另外抓，不等它
     if (!opt.silent) setBusy(true);
     try {
       const r = await fetch(API_URL + "?action=bootstrap&month=" + mk + (opt.noCache ? "&fresh=1" : "")); // 按重新整理時要最新的，不用快取
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "讀取失敗");
+      applyPending_(j, mk, reqAt); // 把本機做過、這份資料還沒反映的操作蓋回去
       // 內容完全相同就不動 state，避免無謂重繪把使用者正在編輯的東西洗掉
       setData(prev => {
         try {
@@ -1706,6 +1746,14 @@ function App() {
     });
     toast(on ? opt.time ? "已登錄 " + fmtShort(stamp) + " ✓" : "已標記抄表 ✓" : "已取消抄表");
     // 存檔排進背景佇列，存完才知道結果；失敗就把畫面改回原狀
+    const pk = month + "|" + c.id;
+    pendingMeter[pk] = {
+      v: on ? {
+        time: stamp,
+        by: user
+      } : null,
+      done: 0
+    };
     pendingSaves++;
     const job = saveQueue.then(() => api("meterToggle", {
       month,
@@ -1718,6 +1766,7 @@ function App() {
     saveQueue = job.catch(() => {});
     job.then(r => {
       if (r && r.ok) {
+        if (pendingMeter[pk]) pendingMeter[pk].done = Date.now();
         if (on && r.time && r.time !== stamp) setData(d => {
           const m = {
             ...d.meter
@@ -1733,6 +1782,7 @@ function App() {
         });
         return;
       }
+      delete pendingMeter[pk];
       setData(d => {
         const m = {
           ...d.meter
@@ -1745,6 +1795,7 @@ function App() {
       });
       toast("存檔失敗：" + (r && r.error || "連線中斷") + "，請再按一次", 6000);
     }).catch(e => {
+      delete pendingMeter[pk];
       setData(d => {
         const m = {
           ...d.meter
@@ -2174,7 +2225,6 @@ function App() {
       }, "\u4E0A\u6B21\u6284\u8868\uFF1A", lm ? fmtShort(lm.time) + "（" + lm.month + "）" + (lm.by ? "　" + lm.by : "") : "無紀錄"));
     })(), !pick ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
       onClick: () => toggleMeter(c),
-      disabled: busy,
       style: btnS(m ? "light" : "accent", {
         width: "100%",
         padding: "14px"
@@ -2235,7 +2285,7 @@ function App() {
         gap: 8
       }
     }, /*#__PURE__*/React.createElement("button", {
-      disabled: busy || !pd || !pt,
+      disabled: !pd || !pt,
       onClick: async () => {
         const stamp = pd.replace(/-/g, "/") + " " + pt;
         const ok = await toggleMeter(c, {

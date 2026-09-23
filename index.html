@@ -215,6 +215,18 @@ function cacheSet(month, data) {
 /* 還在送出中的存檔數。大於 0 時背景自動更新先暫停，
    不然更新抓回來的是存檔前的舊資料，會把剛打的字蓋回去 */
 let pendingSaves = 0;
+/* 存檔：畫面先更新，存檔在背景排成一列依序送出（抄表打勾、單據都走這一條）。
+   伺服器一次只能處理一筆，連續快速操作時如果同時送，排太久會逾時失敗；排成一列就不會。
+   billLatest 記著每家最新的單據內容（還沒存完的也算），下一次存檔以它為底合併，不會互相蓋掉。 */
+let saveQueue = Promise.resolve();
+const billLatest = {};
+const billPending = {};
+window.addEventListener("beforeunload", e => {
+  if (pendingSaves > 0) {
+    e.preventDefault(); // 還有資料沒存完就要關網頁 → 瀏覽器會先問一下
+    e.returnValue = "";
+  }
+});
 async function api(action, body = {}) {
   const r = await fetch(API_URL, {
     method: "POST",
@@ -682,7 +694,13 @@ function BillsPage(P) {
   const [bs, setBs] = useState("待處理");
   const [bk, setBk] = useState("");
   const [open, setOpen] = useState(null); // 展開編輯的客戶 id
-  const [saving, setSaving] = useState("");
+  const [saving, setSaving] = useState(() => {
+    const o = {};
+    Object.keys(billPending).forEach(k => {
+      if (billPending[k] > 0) o[k.split("|")[1]] = true;
+    });
+    return o;
+  }); // 哪幾家還在背景存檔中（只用來顯示「儲存中…」，不鎖按鈕）
   const today = () => {
     const d = new Date();
     return d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate());
@@ -749,15 +767,10 @@ function BillsPage(P) {
     });
     return o;
   }, [clients, billInfo]);
-  // 每家最新的單據內容（包含還在送出中的），下一次存檔以它為底合併。
-  // 原本是拿畫面上的資料當底，前一欄還沒存完就改下一欄的話，
-  // 後面那次會用「前一欄存好之前」的舊內容整筆覆蓋回去（例如剛打的備註被清空）。
-  const latest = useRef({});
-  // 同一家的存檔排隊依序送出，後改的不會被先送出的舊內容蓋掉
-  const queue = useRef({});
   async function push(c, patch) {
+    const key = month + "|" + c.id;
     const i = billInfo(c);
-    const cur = latest.current[c.id] || i.b || {
+    const cur = billLatest[key] || i.b || {
       made: "",
       no: "",
       sent: "",
@@ -769,8 +782,7 @@ function BillsPage(P) {
       ...cur,
       ...patch
     };
-    latest.current[c.id] = next;
-    setSaving(c.id);
+    billLatest[key] = next;
     const clean = {
       made: dayOnly(next.made),
       no: next.no || "",
@@ -779,16 +791,32 @@ function BillsPage(P) {
       bdate: dayOnly(next.bdate),
       memo: next.memo || ""
     };
+    // 先更新畫面，不等網路：按鈕不用鎖，可以馬上按下一個或換下一家
+    const empty = !clean.made && !clean.no.trim() && !clean.sent && !clean.back && !clean.bdate && !clean.memo.trim();
+    setData(d => {
+      const bl = {
+        ...(d.bills || {})
+      };
+      if (empty) delete bl[c.id];else bl[c.id] = next;
+      return {
+        ...d,
+        bills: bl
+      };
+    });
+    billPending[key] = (billPending[key] || 0) + 1;
+    setSaving(s => ({
+      ...s,
+      [c.id]: true
+    }));
     pendingSaves++;
-    const job = (queue.current[c.id] || Promise.resolve()).then(() => api("saveBill", {
+    const job = saveQueue.then(() => api("saveBill", {
       month,
       id: c.id,
       owner: c.owner,
       user,
       data: clean
     }));
-    const tail = job.catch(() => {});
-    queue.current[c.id] = tail;
+    saveQueue = job.catch(() => {});
     let r;
     try {
       r = await job;
@@ -799,27 +827,23 @@ function BillsPage(P) {
       };
     }
     pendingSaves = Math.max(0, pendingSaves - 1);
-    const isLast = queue.current[c.id] === tail; // 這家已經沒有排隊中的存檔
-    if (isLast) {
-      delete queue.current[c.id];
-      setSaving("");
+    billPending[key] = Math.max(0, (billPending[key] || 1) - 1);
+    if (!billPending[key]) {
+      delete billPending[key];
+      delete billLatest[key];
+      setSaving(s => {
+        const o = {
+          ...s
+        };
+        delete o[c.id];
+        return o;
+      });
     }
-    if (!r.ok) {
-      delete latest.current[c.id];
-      return toast("失敗：" + r.error, 5000);
+    if (!r || !r.ok) {
+      delete billLatest[key];
+      toast("存檔失敗：" + (r && r.error || "連線中斷") + "，已重新讀取，請再按一次", 6000);
+      if (pendingSaves === 0 && P.reload) P.reload();
     }
-    const show = latest.current[c.id] || next;
-    if (isLast) delete latest.current[c.id];
-    setData(d => {
-      const bl = {
-        ...(d.bills || {})
-      };
-      if (r.cleared && show === next) delete bl[c.id];else bl[c.id] = show;
-      return {
-        ...d,
-        bills: bl
-      };
-    });
   }
   const stColor = {
     未開單: C.grey,
@@ -960,7 +984,13 @@ function BillsPage(P) {
         color: C.muted,
         marginTop: 3
       }
-    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner), (b.made || b.sent) && /*#__PURE__*/React.createElement("div", {
+    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, saving[c.id] && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8,
+        color: C.blue,
+        fontWeight: 600
+      }
+    }, "儲存中…")), (b.made || b.sent) && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.muted,
@@ -1050,7 +1080,6 @@ function BillsPage(P) {
         marginBottom: 12
       }
     }, /*#__PURE__*/React.createElement("button", {
-      disabled: saving === c.id,
       onClick: () => {
         if (b.made) {
           if (!confirm("取消開單？\\n\\n寄出和繳回的紀錄也會一併清除。")) return;
@@ -1070,7 +1099,6 @@ function BillsPage(P) {
         color: b.made ? C.danger : "#fff"
       })
     }, b.made ? "取消開單" : "今天開單"), /*#__PURE__*/React.createElement("button", {
-      disabled: saving === c.id,
       onClick: () => {
         if (b.sent) push(c, {
           sent: "",
@@ -1087,7 +1115,7 @@ function BillsPage(P) {
         color: b.sent ? C.danger : "#fff"
       })
     }, b.sent ? "取消寄出" : "今天寄出"), /*#__PURE__*/React.createElement("button", {
-      disabled: saving === c.id || i.noNeed,
+      disabled: i.noNeed,
       onClick: () => push(c, b.back ? {
         back: false,
         bdate: ""
@@ -1254,7 +1282,7 @@ function App() {
     loadToner(); // 同時另外抓，不等它
     if (!opt.silent) setBusy(true);
     try {
-      const r = await fetch(API_URL + "?action=bootstrap&month=" + mk);
+      const r = await fetch(API_URL + "?action=bootstrap&month=" + mk + (opt.noCache ? "&fresh=1" : "")); // 按重新整理時要最新的，不用快取
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "讀取失敗");
       // 內容完全相同就不動 state，避免無謂重繪把使用者正在編輯的東西洗掉
@@ -1659,26 +1687,16 @@ function App() {
   /* ── 動作 ── */
   async function toggleMeter(c, opt = {}) {
     const on = "on" in opt ? opt.on : !data.meter[c.id];
-    setBusy(true);
-    const r = await api("meterToggle", {
-      month,
-      id: c.id,
-      owner: c.owner,
-      user,
-      on,
-      time: opt.time || ""
-    });
-    setBusy(false);
-    if (!r.ok) {
-      toast("失敗：" + r.error, 5000);
-      return false;
-    }
+    const prev = data.meter[c.id];
+    const now = new Date();
+    const stamp = opt.time || now.getFullYear() + "/" + pad(now.getMonth() + 1) + "/" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes());
+    // 先打勾、先給提示，不等網路，技師可以馬上去掃下一家
     setData(d => {
       const m = {
         ...d.meter
       };
       if (on) m[c.id] = {
-        time: r.time,
+        time: stamp,
         by: user
       };else delete m[c.id];
       return {
@@ -1686,7 +1704,61 @@ function App() {
         meter: m
       };
     });
-    toast(on ? opt.time ? "已登錄 " + fmtShort(r.time) + " ✓" : "已標記抄表 ✓" : "已取消抄表");
+    toast(on ? opt.time ? "已登錄 " + fmtShort(stamp) + " ✓" : "已標記抄表 ✓" : "已取消抄表");
+    // 存檔排進背景佇列，存完才知道結果；失敗就把畫面改回原狀
+    pendingSaves++;
+    const job = saveQueue.then(() => api("meterToggle", {
+      month,
+      id: c.id,
+      owner: c.owner,
+      user,
+      on,
+      time: opt.time || ""
+    }));
+    saveQueue = job.catch(() => {});
+    job.then(r => {
+      if (r && r.ok) {
+        if (on && r.time && r.time !== stamp) setData(d => {
+          const m = {
+            ...d.meter
+          };
+          if (m[c.id]) m[c.id] = {
+            time: r.time,
+            by: user
+          };
+          return {
+            ...d,
+            meter: m
+          };
+        });
+        return;
+      }
+      setData(d => {
+        const m = {
+          ...d.meter
+        };
+        if (prev) m[c.id] = prev;else delete m[c.id];
+        return {
+          ...d,
+          meter: m
+        };
+      });
+      toast("存檔失敗：" + (r && r.error || "連線中斷") + "，請再按一次", 6000);
+    }).catch(e => {
+      setData(d => {
+        const m = {
+          ...d.meter
+        };
+        if (prev) m[c.id] = prev;else delete m[c.id];
+        return {
+          ...d,
+          meter: m
+        };
+      });
+      toast("存檔失敗：" + (e.message || e) + "，請再按一次", 6000);
+    }).then(() => {
+      pendingSaves = Math.max(0, pendingSaves - 1);
+    });
     return true;
   }
 
@@ -4018,7 +4090,10 @@ function App() {
     billInfo: billInfo,
     setPage: setPage,
     toast: toast,
-    Head: Head
+    Head: Head,
+    reload: () => load(month, {
+      noCache: true
+    })
   });else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
     editId: null
   });else if (page === "editClient") body = /*#__PURE__*/React.createElement(ClientForm, {

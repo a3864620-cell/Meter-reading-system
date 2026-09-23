@@ -462,6 +462,42 @@ function TextField({
 }
 
 /* ── 到期徽章文字與顏色（純函式，放模組層讓元件識別穩定） ── */
+/* 這個客戶的超出費用在哪幾個月結算 */
+function overMonths_(v) {
+  const t = String(v || "").trim();
+  if (!t || t === "每月") return "每月";
+  if (t === "不計") return "不計";
+  if (t === "季") return [3, 6, 9, 12];
+  if (t === "半年") return [6, 12];
+  if (t === "年") return [12];
+  const list = t.split(/[,，、\s]+/).map(x => parseInt(x, 10)).filter(n => n >= 1 && n <= 12);
+  return list.length ? list : "每月";
+}
+/* 這個月這個客戶要不要結超出。每月結算的回傳 null（不用特別標） */
+function overInfo_(c, month) {
+  const r = overMonths_(c && c.over);
+  if (r === "每月") return null;
+  if (r === "不計") return { text: "只寄租金", settle: false };
+  const mm = Number(String(month || "").split("-")[1]);
+  return r.indexOf(mm) !== -1 ? { text: "本月結超出", settle: true } : { text: "本月只寄租金", settle: false };
+}
+/* 標記用的小標籤 */
+function overTag_(c, month) {
+  const o = overInfo_(c, month);
+  if (!o) return null;
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 6,
+      padding: "1px 7px",
+      borderRadius: 999,
+      background: o.settle ? C.warnBg : C.blueBg,
+      color: o.settle ? C.warn : C.blue,
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    }
+  }, o.text);
+}
+
 const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
 const dueColor = d => d.state === "over" ? C.danger : d.state === "today" ? C.warn : C.blue;
 
@@ -1022,7 +1058,7 @@ function BillsPage(P) {
         color: C.muted,
         marginTop: 3
       }
-    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, saving[c.id] && /*#__PURE__*/React.createElement("span", {
+    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, overTag_(c, month), saving[c.id] && /*#__PURE__*/React.createElement("span", {
       style: {
         marginLeft: 8,
         color: C.blue,
@@ -1524,6 +1560,12 @@ function App() {
 
   /* ── 單據：送單期限判斷 ── */
   const RTNS = ["技師繳回簽收聯", "客戶寄回回單", "技師收款後繳回", "不需繳回"];
+  /* ── 超出費用怎麼結算 ──
+     留空或「每月」＝每個月都算超出（一般客戶，不特別標示）
+     「不計」＝只寄租金，從來不算超出
+     「季」＝3、6、9、12 月結；「半年」＝6、12 月結；「年」＝12 月結
+     也可以在客戶主檔直接填月份，例如「1,4,7,10」，就照填的月份結算 */
+  const OVERS = ["每月", "季", "半年", "年", "不計"];
   const billInfo = useCallback(c => {
     const lead = data?.config?.lead ?? 5;
     if (c.active === false) return {
@@ -1592,6 +1634,15 @@ function App() {
       d: dueInfo(c)
     })).filter(x => !x.d.none && x.d.diff <= x.d.lead).sort((a, b) => a.d.diff - b.d.diff);
   }, [clients, data, dueInfo, month]);
+
+  /* ── 近期該送單：用客戶主檔的送單日推算，提前 lead 天開始提醒 ── */
+  const billDueList = useMemo(() => {
+    if (!data || month !== monthKey(new Date())) return [];
+    return clients.map(c => ({
+      c,
+      i: billInfo(c)
+    })).filter(x => !x.i.none && !x.i.done && x.i.diff <= x.i.lead).sort((a, b) => a.i.diff - b.i.diff);
+  }, [clients, data, billInfo, month]);
 
   /* ── 冷卻判斷 ── */
   const coolInfo = useCallback(id => {
@@ -3138,8 +3189,11 @@ function App() {
       day: "",
       cycle: 1,
       bday: "",
-      rtn: RTNS[0]
+      rtn: RTNS[0],
+      over: ""
     });
+    const overRaw = String(f.over || "").trim();
+    const overMode = !overRaw ? "每月" : OVERS.indexOf(overRaw) !== -1 ? overRaw : "自訂";
     const [w, setW] = useState(false);
     const [er, setEr] = useState("");
 
@@ -3175,7 +3229,8 @@ function App() {
           cycle: Number(f.cycle ?? 1),
           active: f.active !== false,
           bday: f.bday || "",
-          rtn: f.rtn || RTNS[0]
+          rtn: f.rtn || RTNS[0],
+          over: String(f.over || "").trim()
         },
         oldId: editId || ""
       });
@@ -3351,6 +3406,39 @@ function App() {
     }, RTNS.map(x => /*#__PURE__*/React.createElement("option", {
       key: x
     }, x))), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "超出費用結算"), /*#__PURE__*/React.createElement("select", {
+      value: overMode,
+      onChange: e => {
+        const v = e.target.value;
+        setF({
+          ...f,
+          over: v === "自訂" ? overRaw && OVERS.indexOf(overRaw) === -1 ? overRaw : "1,4,7,10" : v === "每月" ? "" : v
+        });
+      },
+      style: inp({
+        marginBottom: overMode === "自訂" ? 6 : 4
+      })
+    }, OVERS.concat(["自訂"]).map(x => /*#__PURE__*/React.createElement("option", {
+      key: x
+    }, x))), overMode === "自訂" && /*#__PURE__*/React.createElement("input", {
+      value: overRaw,
+      onChange: e => setF({
+        ...f,
+        over: e.target.value
+      }),
+      placeholder: "結算的月份，用逗號分開，例如 1,4,7,10",
+      style: inp({
+        marginBottom: 4
+      })
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, "每月＝每個月都算超出；不計＝只寄租金，從不算超出；季＝3、6、9、12 月結；半年＝6、12 月結；年＝12 月結。單據管理會標出這個月是只寄租金還是要結超出。"), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("textarea", {
       value: f.memo,
@@ -3870,6 +3958,83 @@ function App() {
           fontSize: 14
         })
       }, dueList.length > 5 ? "查看全部 " + dueList.length + " 間" : "開啟完整清單"));
+    })(), billDueList.length > 0 && (() => {
+      // 近期該送單：送單日快到或已經逾期、而且還沒寄出的，提前讓助理知道
+      const over = billDueList.filter(x => x.i.state === "over").length;
+      return /*#__PURE__*/React.createElement("div", {
+        style: card({
+          borderLeft: "4px solid " + (over ? C.danger : C.blue)
+        })
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 10
+        }
+      }, /*#__PURE__*/React.createElement("b", {
+        style: {
+          fontSize: 16
+        }
+      }, "近期該送單"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 13,
+          color: C.muted
+        }
+      }, billDueList.length, " 間", over > 0 && /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: C.danger,
+          marginLeft: 6
+        }
+      }, "逾期 ", over))), billDueList.slice(0, 5).map(({
+        c,
+        i
+      }) => /*#__PURE__*/React.createElement("div", {
+        key: c.id,
+        onClick: () => setPage("bills"),
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 0",
+          borderBottom: "1px solid " + C.line,
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 15,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }
+      }, c.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: C.muted,
+          marginTop: 2
+        }
+      }, c.dist, "\u3000\xB7\u3000", c.owner, /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 6,
+          color: i.st === "未開單" ? C.muted : C.text
+        }
+      }, i.st), overTag_(c, month))), /*#__PURE__*/React.createElement(DueBadge, {
+        d: i,
+        small: true
+      }))), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPage("bills"),
+        style: btnS("light", {
+          width: "100%",
+          marginTop: 10,
+          fontSize: 14
+        })
+      }, billDueList.length > 5 ? "開啟單據管理（共 " + billDueList.length + " 間）" : "開啟單據管理"));
     })(), /*#__PURE__*/React.createElement("div", {
       style: card()
     }, /*#__PURE__*/React.createElement("div", {

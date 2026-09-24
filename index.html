@@ -462,40 +462,115 @@ function TextField({
 }
 
 /* ── 到期徽章文字與顏色（純函式，放模組層讓元件識別穩定） ── */
-/* 依週期和起算月算出是哪幾個月。
-   起算月 2 + 季 → 2、5、8、11；留空當 1 月。也可以直接填「2,5,8,11」完全自訂。 */
-function cycleMonths_(v, anchor) {
+/* ── 週期設定 ──
+   週期值：1～12＝每 N 個月；「不計」＝從不計算；也可以直接填月份「1,4,7,10」。
+           舊的「每月／季／半年／年」也還讀得懂。
+   起算值：填年月最準（例如 2026-02，表示從那一期開始，每 N 個月一次）；
+           只填月份 1～12 也可以，能被 12 整除的週期（2、3、4、6、12）用這樣就夠。 */
+function parseCycle_(v) {
   const t = String(v || "").trim();
-  const a = Number(anchor) >= 1 && Number(anchor) <= 12 ? Number(anchor) : 1;
-  if (!t || t === "每月") return "每月";
-  if (t === "不計") return "不計";
-  const step = t === "季" ? 3 : t === "半年" ? 6 : t === "年" ? 12 : 0;
-  if (step) {
-    const out = [];
-    for (let i = 0; i < 12 / step; i++) out.push((a - 1 + i * step) % 12 + 1);
-    return out.sort((x, y) => x - y);
+  if (!t || t === "每月") return { type: "every", n: 1 };
+  if (t === "不計") return { type: "none" };
+  if (t === "季") return { type: "every", n: 3 };
+  if (t === "半年") return { type: "every", n: 6 };
+  if (t === "年") return { type: "every", n: 12 };
+  // 自己挑的月份寫成「月份:3,7,11」，跟「每 3 個月」分得開
+  const picked = t.match(/^月份[:：]\s*(.*)$/);
+  const body = picked ? picked[1] : t;
+  if (!picked && /^\d+$/.test(body)) {
+    const n = parseInt(body, 10);
+    if (n >= 1 && n <= 12) return { type: "every", n };
   }
-  const list = t.split(/[,，、\s]+/).map(x => parseInt(x, 10)).filter(n => n >= 1 && n <= 12);
-  return list.length ? list.sort((x, y) => x - y) : "每月";
+  const list = body.split(/[,，、\s]+/).map(x => parseInt(x, 10)).filter(n => n >= 1 && n <= 12);
+  if (list.length) return { type: "list", months: Array.from(new Set(list)).sort((x, y) => x - y) };
+  return { type: "every", n: 1 };
 }
 
-const monthText_ = list => Array.isArray(list) ? list.join("、") + " 月" : list;
+function parseAnchor_(a) {
+  const t = String(a || "").trim();
+  const ym = t.match(/^(\d{4})[-/](\d{1,2})$/);
+  if (ym) return { y: Number(ym[1]), m: Number(ym[2]) };
+  const n = parseInt(t, 10);
+  if (n >= 1 && n <= 12) return { y: null, m: n };
+  return { y: null, m: 1 };
+}
+
+/* 這個年月(例如 "2026-09")是不是這個週期的月份 */
+function inCycle_(v, anchor, ym) {
+  const c = parseCycle_(v);
+  if (c.type === "none") return false;
+  const parts = String(ym || "").split("-");
+  const y = Number(parts[0]), mm = Number(parts[1]);
+  if (c.type === "list") return c.months.indexOf(mm) !== -1;
+  if (c.n === 1) return true;
+  const a = parseAnchor_(anchor);
+  // 沒填年份時：能整除 12 的週期只看月份就準；不能整除的(5、7…)就以今年為基準
+  const ay = a.y || (12 % c.n === 0 ? null : new Date().getFullYear());
+  if (ay === null) return (((mm - a.m) % c.n) + c.n) % c.n === 0;
+  const diff = (y * 12 + mm) - (ay * 12 + a.m);
+  return diff >= 0 && diff % c.n === 0;
+}
+
+/* 接下來幾次會落在哪幾個年月(給設定畫面預覽用) */
+function nextCycleMonths_(v, anchor, fromYm, count) {
+  const out = [];
+  const parts = String(fromYm || "").split("-");
+  let y = Number(parts[0]), m = Number(parts[1]);
+  for (let i = 0; i < 72 && out.length < count; i++) {
+    if (inCycle_(v, anchor, y + "-" + String(m).padStart(2, "0"))) out.push(y + "/" + m);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
 
 /* 這個月要不要寄租金單 */
 function rentDue_(c, month) {
-  const r = cycleMonths_(c && c.rent, c && c.anchor);
-  if (!Array.isArray(r)) return true;                       // 每月／不計都當每個月要寄
-  return r.indexOf(Number(String(month || "").split("-")[1])) !== -1;
+  return inCycle_(c && c.rent, c && c.anchor, month);
 }
 
-/* 這個月這個客戶要不要結超出。每月結算的回傳 null（不用特別標） */
+/* 這個月這個客戶要不要結超出。每個月都算的回傳 null（不用特別標） */
 function overInfo_(c, month) {
-  const r = cycleMonths_(c && c.over, c && c.anchor);
-  if (r === "每月") return null;
-  if (r === "不計") return { text: "只寄租金", settle: false };
-  return r.indexOf(Number(String(month || "").split("-")[1])) !== -1
+  const spec = parseCycle_(c && c.over);
+  if (spec.type === "none") return { text: "只寄租金", settle: false };
+  if (spec.type === "every" && spec.n === 1) return null;
+  return inCycle_(c && c.over, c && c.anchor, month)
     ? { text: "本月結超出", settle: true }
     : { text: "本月只寄租金", settle: false };
+}
+
+/* 自己挑月份：1～12 直接點，不用打字 */
+function MonthPicker({ value, onChange }) {
+  const spec = parseCycle_(value);
+  const sel = spec.type === "list" ? spec.months : [];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(6, 1fr)",
+      gap: 6,
+      marginBottom: 6
+    }
+  }, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => {
+    const on = sel.indexOf(m) !== -1;
+    return /*#__PURE__*/React.createElement("button", {
+      key: m,
+      type: "button",
+      onClick: () => {
+        const next = on ? sel.filter(x => x !== m) : sel.concat([m]).sort((a, b) => a - b);
+        onChange(next.length ? "月份:" + next.join(",") : "");
+      },
+      style: {
+        padding: "8px 0",
+        borderRadius: 8,
+        border: "1px solid " + (on ? C.accent : C.line),
+        background: on ? C.accent : "#fff",
+        color: on ? "#fff" : C.text,
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, m);
+  }));
 }
 
 /* 單據列表上的小標籤：本月不寄單／只寄租金／本月結超出 */
@@ -1584,8 +1659,11 @@ function App() {
      「不計」＝只寄租金，從來不算超出
      「季」＝3、6、9、12 月結；「半年」＝6、12 月結；「年」＝12 月結
      也可以在客戶主檔直接填月份，例如「1,4,7,10」，就照填的月份結算 */
-  const OVERS = ["每月", "季", "半年", "年", "不計"];
-  const RENTS = ["每月", "季", "半年", "年"];
+  /* 週期選項：每 1～12 個月。常見的幾個順便標出俗稱，方便選 */
+  const CYCLE_OPTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => ({
+    v: String(n),
+    label: n === 1 ? "每月" : "每 " + n + " 個月" + (n === 3 ? "（季）" : n === 6 ? "（半年）" : n === 12 ? "（年）" : "")
+  }));
   const billInfo = useCallback(c => {
     const lead = data?.config?.lead ?? 5;
     if (c.active === false) return {
@@ -3224,12 +3302,20 @@ function App() {
       rent: "",
       anchor: ""
     });
-    const overRaw = String(f.over || "").trim();
-    const overMode = !overRaw ? "每月" : OVERS.indexOf(overRaw) !== -1 ? overRaw : "自訂";
-    const rentRaw = String(f.rent || "").trim();
-    const rentMode = !rentRaw ? "每月" : RENTS.indexOf(rentRaw) !== -1 ? rentRaw : "自訂";
-    const rentPreview = monthText_(cycleMonths_(f.rent, f.anchor));
-    const overPreview = monthText_(cycleMonths_(f.over, f.anchor));
+    // 目前這一欄該選哪個選項（舊的「季/半年/年」也對得起來）
+    const modeOf = v => {
+      const c = parseCycle_(v);
+      return c.type === "none" ? "不計" : c.type === "list" ? "自訂" : String(c.n);
+    };
+    const rentRaw = String(f.rent || "").trim(), overRaw = String(f.over || "").trim();
+    // 用狀態記住有沒有選「自己挑月份」，這樣月份全部取消時選單也不會跳回每月
+    const [rentPick, setRentPick] = useState(() => parseCycle_(rentRaw).type === "list");
+    const [overPick, setOverPick] = useState(() => parseCycle_(overRaw).type === "list");
+    const rentMode = rentPick ? "自訂" : modeOf(rentRaw);
+    const overMode = overPick ? "自訂" : modeOf(overRaw);
+    const thisMonth = monthKey(new Date());
+    const rentNext = nextCycleMonths_(f.rent, f.anchor, thisMonth, 3);
+    const overNext = parseCycle_(f.over).type === "none" ? [] : nextCycleMonths_(f.over, f.anchor, thisMonth, 3);
     const [w, setW] = useState(false);
     const [er, setEr] = useState("");
 
@@ -3268,7 +3354,7 @@ function App() {
           rtn: f.rtn || RTNS[0],
           over: String(f.over || "").trim(),
           rent: String(f.rent || "").trim(),
-          anchor: f.anchor || ""
+          anchor: String(f.anchor || "").trim()
         },
         oldId: editId || ""
       });
@@ -3449,56 +3535,74 @@ function App() {
       value: rentMode,
       onChange: e => {
         const v = e.target.value;
-        setF({
+        setRentPick(v === "自訂");
+        if (v !== "自訂") setF({
           ...f,
-          rent: v === "自訂" ? rentRaw && RENTS.indexOf(rentRaw) === -1 ? rentRaw : "1,4,7,10" : v === "每月" ? "" : v
+          rent: v
         });
       },
       style: inp({
         marginBottom: rentMode === "自訂" ? 6 : 4
       })
-    }, RENTS.concat(["自訂"]).map(x => /*#__PURE__*/React.createElement("option", {
-      key: x
-    }, x))), rentMode === "自訂" && /*#__PURE__*/React.createElement("input", {
+    }, CYCLE_OPTS.concat([{
+      v: "自訂",
+      label: "自己挑月份"
+    }]).map(o => /*#__PURE__*/React.createElement("option", {
+      key: o.v,
+      value: o.v
+    }, o.label))), rentMode === "自訂" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        margin: "2px 0 6px"
+      }
+    }, "點選要寄租金單的月份（可以選好幾個）"), /*#__PURE__*/React.createElement(MonthPicker, {
       value: rentRaw,
-      onChange: e => setF({
+      onChange: v => setF({
         ...f,
-        rent: e.target.value
-      }),
-      placeholder: "寄單的月份，用逗號分開，例如 1,4,7,10",
-      style: inp({
-        marginBottom: 4
+        rent: v
       })
-    }), /*#__PURE__*/React.createElement("span", {
+    })), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "超出費用結算"), /*#__PURE__*/React.createElement("select", {
       value: overMode,
       onChange: e => {
         const v = e.target.value;
-        setF({
+        setOverPick(v === "自訂");
+        if (v !== "自訂") setF({
           ...f,
-          over: v === "自訂" ? overRaw && OVERS.indexOf(overRaw) === -1 ? overRaw : "1,4,7,10" : v === "每月" ? "" : v
+          over: v
         });
       },
       style: inp({
         marginBottom: overMode === "自訂" ? 6 : 4
       })
-    }, OVERS.concat(["自訂"]).map(x => /*#__PURE__*/React.createElement("option", {
-      key: x
-    }, x))), overMode === "自訂" && /*#__PURE__*/React.createElement("input", {
+    }, CYCLE_OPTS.concat([{
+      v: "不計",
+      label: "不計（只寄租金）"
+    }, {
+      v: "自訂",
+      label: "自己挑月份"
+    }]).map(o => /*#__PURE__*/React.createElement("option", {
+      key: o.v,
+      value: o.v
+    }, o.label))), overMode === "自訂" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        margin: "2px 0 6px"
+      }
+    }, "點選要結算超出費用的月份（可以選好幾個）"), /*#__PURE__*/React.createElement(MonthPicker, {
       value: overRaw,
-      onChange: e => setF({
+      onChange: v => setF({
         ...f,
-        over: e.target.value
-      }),
-      placeholder: "結算的月份，用逗號分開，例如 1,4,7,10",
-      style: inp({
-        marginBottom: 4
+        over: v
       })
-    }), /*#__PURE__*/React.createElement("span", {
+    })), /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "起算月（季／半年／年從哪個月開始）"), /*#__PURE__*/React.createElement("select", {
-      value: String(f.anchor || ""),
+    }, rentMode === "自訂" && overMode === "自訂" ? "從哪一期開始（自己挑月份時用不到）" : "從哪一期開始"), /*#__PURE__*/React.createElement("input", {
+      type: "month",
+      value: /^\d{4}-\d{2}$/.test(String(f.anchor || "")) ? f.anchor : "",
       onChange: e => setF({
         ...f,
         anchor: e.target.value
@@ -3506,10 +3610,7 @@ function App() {
       style: inp({
         marginBottom: 4
       })
-    }, [""].concat([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map(x => /*#__PURE__*/React.createElement("option", {
-      key: String(x),
-      value: String(x)
-    }, x === "" ? "1 月（預設）" : x + " 月"))), /*#__PURE__*/React.createElement("div", {
+    }), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.blue,
@@ -3519,7 +3620,7 @@ function App() {
         marginBottom: 12,
         lineHeight: 1.7
       }
-    }, "這樣設定的結果：租金 ", rentPreview === "每月" ? "每個月都寄單" : "只在 " + rentPreview + "寄單", "；超出費用 ", overPreview === "每月" ? "每個月都算" : overPreview === "不計" ? "從不計算（只寄租金）" : "只在 " + overPreview + "結算", "。單據管理會照這個標示，不用寄單的月份不會催。"), /*#__PURE__*/React.createElement("span", {
+    }, "接下來的租金單：", rentNext.join("、") || "（沒有）", overNext.length ? "；超出結算：" + overNext.join("、") : parseCycle_(f.over).type === "none" ? "；超出：不計（只寄租金）" : "", "。不用寄單的月份，單據管理不會催，會標「本月不寄單」。"), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("textarea", {
       value: f.memo,

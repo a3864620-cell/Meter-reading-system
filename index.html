@@ -511,6 +511,23 @@ function inCycle_(v, anchor, ym) {
   return diff >= 0 && diff % c.n === 0;
 }
 
+/* 說明這個週期實際會落在哪些月份：
+   能整除 12 的（每 2、3、4、6、12 個月）每年固定，直接列月份最好懂；
+   不能整除的（5、7…）會跨年度，就列接下來幾期的年月。 */
+function cycleDesc_(v, anchor, fromYm) {
+  const c = parseCycle_(v);
+  if (c.type === "none") return "不計（只寄租金）";
+  if (c.type === "list") return "每年 " + c.months.join("、") + " 月";
+  if (c.n === 1) return "每個月";
+  if (12 % c.n === 0) {
+    const a = parseAnchor_(anchor);
+    const out = [];
+    for (let i = 0; i < 12 / c.n; i++) out.push((a.m - 1 + i * c.n) % 12 + 1);
+    return "每年 " + out.sort((x, y) => x - y).join("、") + " 月";
+  }
+  return "接下來 " + nextCycleMonths_(v, anchor, fromYm, 3).join("、") + "（每 " + c.n + " 個月一次，會跨年度）";
+}
+
 /* 接下來幾次會落在哪幾個年月(給設定畫面預覽用) */
 function nextCycleMonths_(v, anchor, fromYm, count) {
   const out = [];
@@ -1659,10 +1676,13 @@ function App() {
      「不計」＝只寄租金，從來不算超出
      「季」＝3、6、9、12 月結；「半年」＝6、12 月結；「年」＝12 月結
      也可以在客戶主檔直接填月份，例如「1,4,7,10」，就照填的月份結算 */
-  /* 週期選項：每 1～12 個月。常見的幾個順便標出俗稱，方便選 */
+  /* 週期選項：標明「一年幾次」，避免把「每 4 個月」誤會成一年四次 */
   const CYCLE_OPTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => ({
     v: String(n),
-    label: n === 1 ? "每月" : "每 " + n + " 個月" + (n === 3 ? "（季）" : n === 6 ? "（半年）" : n === 12 ? "（年）" : "")
+    label: n === 1 ? "每月（一年 12 次）"
+      : "每 " + n + " 個月"
+        + (n === 3 ? "（季，一年 4 次）" : n === 6 ? "（半年，一年 2 次）" : n === 12 ? "（一年 1 次）"
+          : 12 % n === 0 ? "（一年 " + 12 / n + " 次）" : "（跨年度）")
   }));
   const billInfo = useCallback(c => {
     const lead = data?.config?.lead ?? 5;
@@ -2911,6 +2931,89 @@ function App() {
   }
 
   /* ══════ QR 標籤列印 ══════ */
+  /* ── 批次設定週期：一次幫一批客戶套用同樣的設定 ── */
+  function BulkCycle() {
+    const [owner, setOwner] = useState("全部");
+    const [dist, setDist] = useState("全部");
+    const [kw, setKw] = useState("");
+    const [sel, setSel] = useState({});
+    const [rent, setRent] = useState("1");
+    const [over, setOver] = useState("1");
+    const [anchor, setAnchor] = useState("");
+    const [doRent, setDoRent] = useState(true);
+    const [doOver, setDoOver] = useState(true);
+    const [doAnchor, setDoAnchor] = useState(true);
+    const [busyB, setBusyB] = useState(false);
+    const dists = Array.from(new Set(clients.map(c => c.dist).filter(Boolean))).sort();
+    const list = clients.filter(c => {
+      if (c.active === false) return false;
+      if (owner !== "全部" && c.owner !== owner) return false;
+      if (dist !== "全部" && c.dist !== dist) return false;
+      if (kw && !(c.name.includes(kw) || c.id.toUpperCase().includes(kw.toUpperCase()))) return false;
+      return true;
+    });
+    const picked = list.filter(c => sel[c.id]);
+    const opts = CYCLE_OPTS.concat([{ v: "不計", label: "不計（只寄租金）" }]);
+    async function apply() {
+      if (!picked.length) return toast("請先勾選客戶");
+      if (!doRent && !doOver && !doAnchor) return toast("請至少勾一項要設定的東西");
+      setBusyB(true);
+      const r = await api("bulkCycle", {
+        ids: picked.map(c => c.id),
+        setRent: doRent, rent: doRent ? rent : "",
+        setOver: doOver, over: doOver ? over : "",
+        setAnchor: doAnchor, anchor: doAnchor ? anchor : ""
+      });
+      setBusyB(false);
+      if (!r.ok) return toast("失敗：" + r.error, 5000);
+      await load(month, { noCache: true });
+      setSel({});
+      toast("已套用到 " + r.updated + " 間客戶 ✓");
+    }
+    const row = (label, node) => /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 4 } }, label), node);
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement(Head, { title: "批次設定週期", back: () => setPage("list") }),
+      /*#__PURE__*/React.createElement("div", { style: card() },
+        /*#__PURE__*/React.createElement("b", { style: { fontSize: 15 } }, "1. 先挑要設定的客戶"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
+          /*#__PURE__*/React.createElement("select", { value: owner, onChange: e => setOwner(e.target.value), style: inp({ marginBottom: 0 }) },
+            /*#__PURE__*/React.createElement("option", null, "全部"), owners.map(o => /*#__PURE__*/React.createElement("option", { key: o }, o))),
+          /*#__PURE__*/React.createElement("select", { value: dist, onChange: e => setDist(e.target.value), style: inp({ marginBottom: 0 }) },
+            /*#__PURE__*/React.createElement("option", null, "全部"), dists.map(d => /*#__PURE__*/React.createElement("option", { key: d }, d)))),
+        /*#__PURE__*/React.createElement(SearchBox, { value: kw, onChange: setKw, placeholder: "搜尋客戶名稱或編號", style: inp({ marginTop: 8, marginBottom: 8 }) }),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 } },
+          /*#__PURE__*/React.createElement("button", { onClick: () => { const o = { ...sel }; list.forEach(c => o[c.id] = true); setSel(o); }, style: btnS("light", { fontSize: 13, padding: "7px 10px" }) }, "全選這 " + list.length + " 間"),
+          /*#__PURE__*/React.createElement("button", { onClick: () => setSel({}), style: btnS("light", { fontSize: 13, padding: "7px 10px" }) }, "全部取消"),
+          /*#__PURE__*/React.createElement("span", { style: { marginLeft: "auto", fontSize: 13, color: picked.length ? C.accent : C.muted, fontWeight: 700 } }, "已勾 " + picked.length + " 間")),
+        /*#__PURE__*/React.createElement("div", { style: { maxHeight: 260, overflowY: "auto", border: "1px solid " + C.line, borderRadius: 8 } },
+          list.map(c => /*#__PURE__*/React.createElement("label", {
+            key: c.id,
+            style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid " + C.line, fontSize: 14 }
+          },
+            /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: !!sel[c.id], onChange: e => setSel({ ...sel, [c.id]: e.target.checked }), style: { width: 18, height: 18 } }),
+            /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, c.name),
+            /*#__PURE__*/React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, c.id, "　", cycleDesc_(c.rent, c.anchor, month)))))),
+      /*#__PURE__*/React.createElement("div", { style: card() },
+        /*#__PURE__*/React.createElement("b", { style: { fontSize: 15 } }, "2. 要套用什麼設定"),
+        /*#__PURE__*/React.createElement("div", { style: { marginTop: 8 } },
+          row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doRent, onChange: e => setDoRent(e.target.checked) }), "租金週期"),
+            /*#__PURE__*/React.createElement("select", { value: rent, disabled: !doRent, onChange: e => setRent(e.target.value), style: inp({ marginBottom: 0 }) },
+              CYCLE_OPTS.map(o => /*#__PURE__*/React.createElement("option", { key: o.v, value: o.v }, o.label)))),
+          row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doOver, onChange: e => setDoOver(e.target.checked) }), "超出費用結算"),
+            /*#__PURE__*/React.createElement("select", { value: over, disabled: !doOver, onChange: e => setOver(e.target.value), style: inp({ marginBottom: 0 }) },
+              opts.map(o => /*#__PURE__*/React.createElement("option", { key: o.v, value: o.v }, o.label)))),
+          row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doAnchor, onChange: e => setDoAnchor(e.target.checked) }), "從哪一期開始"),
+            /*#__PURE__*/React.createElement("input", { type: "month", value: anchor, disabled: !doAnchor, onChange: e => setAnchor(e.target.value), style: inp({ marginBottom: 0 }) }))),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.blue, background: C.blueBg, borderRadius: 8, padding: "8px 10px", margin: "4px 0 10px", lineHeight: 1.7 } },
+          "套用後：租金 ", doRent ? cycleDesc_(rent, anchor, month) : "不變", "；超出 ", doOver ? cycleDesc_(over, anchor, month) : "不變", "。沒勾的項目不會動到。"),
+        /*#__PURE__*/React.createElement("button", { onClick: apply, disabled: busyB || !picked.length, style: btnS("primary", { width: "100%" }) },
+          busyB ? "套用中…" : "套用到已勾的 " + picked.length + " 間")));
+  }
+
   function Labels() {
     const [qrReady, setQrReady] = useState(!!window.qrcode);
     const [qrErr, setQrErr] = useState("");
@@ -3314,8 +3417,8 @@ function App() {
     const rentMode = rentPick ? "自訂" : modeOf(rentRaw);
     const overMode = overPick ? "自訂" : modeOf(overRaw);
     const thisMonth = monthKey(new Date());
-    const rentNext = nextCycleMonths_(f.rent, f.anchor, thisMonth, 3);
-    const overNext = parseCycle_(f.over).type === "none" ? [] : nextCycleMonths_(f.over, f.anchor, thisMonth, 3);
+    const rentDesc = cycleDesc_(f.rent, f.anchor, thisMonth);
+    const overDesc = cycleDesc_(f.over, f.anchor, thisMonth);
     const [w, setW] = useState(false);
     const [er, setEr] = useState("");
 
@@ -3338,34 +3441,59 @@ function App() {
       if (!id) return setEr("請填服務編號");
       if (!f.name.trim()) return setEr("請填客戶名稱");
       if (!editId && byId[id]) return setEr("編號 " + id + " 已存在（" + byId[id].name + "）");
+      const client = {
+        id,
+        owner: f.owner.trim(),
+        dist: f.dist.trim(),
+        name: f.name.trim(),
+        memo: f.memo.trim(),
+        day: f.day || "",
+        cycle: Number(f.cycle ?? 1),
+        active: f.active !== false,
+        bday: f.bday || "",
+        rtn: f.rtn || RTNS[0],
+        over: String(f.over || "").trim(),
+        rent: String(f.rent || "").trim(),
+        anchor: String(f.anchor || "").trim()
+      };
+      // 修改既有客戶：畫面先更新、背景存檔，不用等網路（新增客戶還是要等，因為要確認編號沒撞到）
+      if (editId) {
+        setData(d => ({
+          ...d,
+          clients: (d.clients || []).map(x => x.id === editId ? { ...x, ...client } : x)
+        }));
+        setPage("home");
+        setCur(id);
+        toast("已更新客戶資料");
+        pendingSaves++;
+        const job = saveQueue.then(() => api("saveClient", {
+          client,
+          oldId: editId
+        }));
+        saveQueue = job.catch(() => {});
+        job.then(r => {
+          if (!r || !r.ok) {
+            toast("存檔失敗：" + (r && r.error || "連線中斷") + "，請再改一次", 6000);
+            load(month, { noCache: true });
+          }
+        }).catch(e => {
+          toast("存檔失敗：" + (e.message || e) + "，請再改一次", 6000);
+          load(month, { noCache: true });
+        }).then(() => {
+          pendingSaves = Math.max(0, pendingSaves - 1);
+        });
+        return;
+      }
       setW(true);
       setEr("");
       const r = await api("saveClient", {
-        client: {
-          id,
-          owner: f.owner.trim(),
-          dist: f.dist.trim(),
-          name: f.name.trim(),
-          memo: f.memo.trim(),
-          day: f.day || "",
-          cycle: Number(f.cycle ?? 1),
-          active: f.active !== false,
-          bday: f.bday || "",
-          rtn: f.rtn || RTNS[0],
-          over: String(f.over || "").trim(),
-          rent: String(f.rent || "").trim(),
-          anchor: String(f.anchor || "").trim()
-        },
-        oldId: editId || ""
+        client,
+        oldId: ""
       });
       setW(false);
       if (!r.ok) return setEr(r.error);
       await load(month);
-      if (editId) {
-        setPage("home");
-        setCur(id);
-        toast("已更新客戶資料");
-      } else {
+      {
         setLabelSel([id]);
         setPage("labels");
         toast("已新增 " + id + "，可直接列印標籤");
@@ -3620,7 +3748,7 @@ function App() {
         marginBottom: 12,
         lineHeight: 1.7
       }
-    }, "接下來的租金單：", rentNext.join("、") || "（沒有）", overNext.length ? "；超出結算：" + overNext.join("、") : parseCycle_(f.over).type === "none" ? "；超出：不計（只寄租金）" : "", "。不用寄單的月份，單據管理不會催，會標「本月不寄單」。"), /*#__PURE__*/React.createElement("span", {
+    }, "租金單：", rentDesc, "；超出結算：", overDesc, "。不用寄單的月份，單據管理不會催，會標「本月不寄單」。"), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u5099\u8A3B"), /*#__PURE__*/React.createElement("textarea", {
       value: f.memo,
@@ -3748,7 +3876,14 @@ function App() {
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
       title: "客戶清單　" + listed.length + " 間",
       back: () => setPage("home")
-    }), /*#__PURE__*/React.createElement("div", {
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPage("bulkCycle"),
+      style: btnS("light", {
+        width: "100%",
+        marginBottom: 10,
+        fontSize: 14
+      })
+    }, "批次設定租金／超出週期"), /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "12px 14px",
         background: "#fff",
@@ -4491,7 +4626,7 @@ function App() {
     reload: () => load(month, {
       noCache: true
     })
-  });else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
+  });else if (page === "labels") body = /*#__PURE__*/React.createElement(Labels, null);else if (page === "bulkCycle") body = /*#__PURE__*/React.createElement(BulkCycle, null);else if (page === "addClient") body = /*#__PURE__*/React.createElement(ClientForm, {
     editId: null
   });else if (page === "editClient") body = /*#__PURE__*/React.createElement(ClientForm, {
     editId: cur

@@ -227,6 +227,89 @@ const billPending = {};
 const pendingMeter = {};
 const billDone = {};
 const KEEP_MS = 600000; // 超過 10 分鐘還沒等到，就不再蓋（避免永遠留著）
+
+/* ── 存檔失敗的單據 ──
+   存失敗的不能默默消失：留在這裡，畫面上標紅框，可以「重新送出」或「放棄這張」。
+   也存進 localStorage，就算不小心重新整理，紅框還在，內容也還在。
+   key 跟 billLatest 一樣是「月份|服務編號」。 */
+const FAIL_KEY = "hz_failed_bills";
+const failedBills = (() => {
+  try {
+    const o = JSON.parse(localStorage.getItem(FAIL_KEY) || "{}") || {};
+    Object.keys(o).forEach(k => {
+      o[k].retrying = false;
+      billLatest[k] = o[k].data; // 讓畫面繼續蓋上使用者打的內容，不會被伺服器舊資料洗掉
+    });
+    return o;
+  } catch (e) {
+    return {};
+  }
+})();
+const failListeners = new Set();
+function failedChanged_() {
+  try {
+    localStorage.setItem(FAIL_KEY, JSON.stringify(failedBills));
+  } catch (e) {}
+  failListeners.forEach(f => f());
+}
+function useFailed() {
+  const [, setN] = useState(0);
+  useEffect(() => {
+    const f = () => setN(n => n + 1);
+    failListeners.add(f);
+    return () => {
+      failListeners.delete(f);
+    };
+  }, []);
+  return failedBills;
+}
+/* 重新送出：把記下來的內容再送一次（一樣排進存檔佇列） */
+async function retryBill_(key, toast) {
+  const f = failedBills[key];
+  if (!f || f.retrying) return;
+  f.retrying = true;
+  failedChanged_();
+  pendingSaves++;
+  const job = saveQueue.then(() => api("saveBill", {
+    month: f.month,
+    id: f.id,
+    owner: f.owner,
+    user: f.user,
+    data: f.data
+  }));
+  saveQueue = job.catch(() => {});
+  let r;
+  try {
+    r = await job;
+  } catch (e) {
+    r = {
+      ok: false,
+      error: e.message || String(e)
+    };
+  }
+  pendingSaves = Math.max(0, pendingSaves - 1);
+  const cur = failedBills[key];
+  if (!cur) return; // 期間被放棄了
+  if (r && r.ok) {
+    delete failedBills[key];
+    billDone[key] = Date.now();
+    failedChanged_();
+    toast("「" + f.name + "」已重新送出 ✓");
+  } else {
+    cur.retrying = false;
+    cur.error = r && r.error || "連線中斷";
+    failedChanged_();
+    toast("還是沒存成功：" + cur.error, 5000);
+  }
+}
+/* 放棄這張：不再送出，畫面改回伺服器上的資料 */
+function dropBill_(key, reload) {
+  delete failedBills[key];
+  delete billLatest[key];
+  delete billDone[key];
+  failedChanged_();
+  if (reload) reload();
+}
 function applyPending_(j, mk, reqAt) {
   const m = { ...(j.meter || {}) };
   let hitM = false;
@@ -259,8 +342,8 @@ function applyPending_(j, mk, reqAt) {
   return j;
 }
 window.addEventListener("beforeunload", e => {
-  if (pendingSaves > 0) {
-    e.preventDefault(); // 還有資料沒存完就要關網頁 → 瀏覽器會先問一下
+  if (pendingSaves > 0 || Object.keys(failedBills).length > 0) {
+    e.preventDefault(); // 還有資料沒存完（或有存失敗還沒處理）就要關網頁 → 瀏覽器會先問一下
     e.returnValue = "";
   }
 });
@@ -857,6 +940,115 @@ function Scanner({
   }, err || "把服務編號的 QR 對準框內"));
 }
 
+/* ══════ 存失敗的單據提醒（放在最上面，每一頁都看得到）══════ */
+function FailBanner({
+  month,
+  setMonth,
+  setPage,
+  setCur,
+  reload,
+  toast
+}) {
+  const failed = useFailed();
+  const keys = Object.keys(failed).sort();
+  if (!keys.length) return null;
+  const busy = keys.some(k => failed[k].retrying);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "noprint",
+    style: {
+      background: "#fdecea",
+      borderBottom: "3px solid " + C.danger,
+      padding: "10px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.danger,
+      fontSize: 15
+    }
+  }, "\u26A0\uFE0F 有 ", keys.length, " 張單據沒有存成功"), /*#__PURE__*/React.createElement("button", {
+    disabled: busy,
+    onClick: () => keys.forEach(k => retryBill_(k, toast)),
+    style: btnS("red", {
+      fontSize: 13,
+      padding: "7px 12px"
+    })
+  }, busy ? "送出中…" : "全部重新送出")), keys.map(k => {
+    const f = failed[k];
+    return /*#__PURE__*/React.createElement("div", {
+      key: k,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 0",
+        borderTop: "1px solid #f5c6c0"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onClick: () => {
+        if (f.month !== month) setMonth(f.month);
+        setCur(null);
+        setPage("bills");
+      },
+      style: {
+        minWidth: 0,
+        cursor: "pointer",
+        fontSize: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, f.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.muted
+      }
+    }, f.month, "　", f.id, "　", f.error)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: f.retrying,
+      onClick: () => retryBill_(k, toast),
+      style: btnS("light", {
+        fontSize: 12,
+        padding: "6px 10px",
+        color: C.danger
+      })
+    }, f.retrying ? "送出中…" : "重新送出"), /*#__PURE__*/React.createElement("button", {
+      disabled: f.retrying,
+      onClick: () => {
+        if (confirm("放棄「" + f.name + "」（" + f.month + "）這次沒存成功的內容？")) dropBill_(k, reload);
+      },
+      style: btnS("light", {
+        fontSize: 12,
+        padding: "6px 10px",
+        color: C.muted
+      })
+    }, "放棄")));
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginTop: 6
+    }
+  }, "點名稱可以直接跳到單據管理。還沒處理完之前關掉網頁，瀏覽器會先提醒。"));
+}
+
 /* ══════ 單據管理（助理用）══════
  定義在模組層而非 App 內部，元件識別才會穩定；
  否則 App 每次重繪都會讓這頁被拆掉重建，展開的面板會收合、捲動位置會跳。 */
@@ -873,6 +1065,8 @@ function BillsPage(P) {
     toast,
     Head
   } = P;
+  const failed = useFailed();
+  const failedCount = Object.keys(failed).join(","); // 存失敗的單據（每個分頁都要看得到）
   const [bo, setBo] = useState("全部");
   const [bd, setBd] = useState("全部");
   const [bs, setBs] = useState("待處理");
@@ -912,6 +1106,7 @@ function BillsPage(P) {
   const pool = useMemo(() => {
     const k = bk.trim();
     let arr = clients.filter(c => {
+      if (failed[month + "|" + c.id]) return true; // 沒存成功的一律顯示，不受篩選影響
       if (c.active === false) return false;
       if (bo !== "全部" && c.owner !== bo) return false;
       if (bd !== "全部" && c.dist !== bd) return false;
@@ -926,6 +1121,9 @@ function BillsPage(P) {
       return true;
     });
     return arr.sort((a, b) => {
+      const fa = failed[month + "|" + a.id] ? 0 : 1,
+        fb = failed[month + "|" + b.id] ? 0 : 1;
+      if (fa !== fb) return fa - fb; // 沒存成功的排最上面
       const ia = billInfo(a),
         ib = billInfo(b);
       const va = ia.none ? 99999 : ia.diff,
@@ -933,7 +1131,7 @@ function BillsPage(P) {
       if (va !== vb) return va - vb;
       return a.id < b.id ? -1 : 1;
     });
-  }, [clients, bo, bd, bs, bk, billInfo, open]);
+  }, [clients, bo, bd, bs, bk, billInfo, open, failed, month, failedCount]);
   const dists = useMemo(() => Array.from(new Set(clients.filter(c => bo === "全部" || c.owner === bo).map(c => c.dist).filter(Boolean))).sort(), [clients, bo]);
   const tally = useMemo(() => {
     const o = {
@@ -1012,9 +1210,12 @@ function BillsPage(P) {
     }
     pendingSaves = Math.max(0, pendingSaves - 1);
     billPending[key] = Math.max(0, (billPending[key] || 1) - 1);
+    const ok = !!(r && r.ok);
     if (!billPending[key]) {
       delete billPending[key];
-      billDone[key] = Date.now(); // 先留著，等確定伺服器資料已經包含它再丟
+      // 成功才記「存好的時間」，等確定伺服器資料已經包含它再丟；
+      // 失敗的要一直留著（billLatest 不丟），畫面才不會被舊資料洗掉
+      if (ok) billDone[key] = Date.now();
       setSaving(s => {
         const o = {
           ...s
@@ -1023,11 +1224,27 @@ function BillsPage(P) {
         return o;
       });
     }
-    if (!r || !r.ok) {
-      delete billLatest[key];
-      delete billDone[key];
-      toast("存檔失敗：" + (r && r.error || "連線中斷") + "，已重新讀取，請再按一次", 6000);
-      if (pendingSaves === 0 && P.reload) P.reload();
+    if (ok) {
+      // 這次存成功，內容已包含先前失敗的那一次 → 紅框可以拿掉
+      if (failedBills[key] && !failedBills[key].retrying) {
+        delete failedBills[key];
+        failedChanged_();
+      }
+    } else {
+      // 不要默默丟掉：記下來，畫面標紅框，讓小姐自己決定重送或放棄
+      failedBills[key] = {
+        month,
+        id: c.id,
+        owner: c.owner,
+        name: c.name,
+        user,
+        data: clean,
+        error: r && r.error || "連線中斷",
+        at: Date.now(),
+        retrying: false
+      };
+      failedChanged_();
+      toast("⚠️ 「" + c.name + "」沒有存成功，已標紅框，請按「重新送出」", 6000);
     }
   }
   const stColor = {
@@ -1135,14 +1352,70 @@ function BillsPage(P) {
     const i = billInfo(c);
     const b = i.b || {};
     const isOpen = open === c.id;
+    const fl = failed[month + "|" + c.id];
     return /*#__PURE__*/React.createElement("div", {
       key: c.id,
       style: card({
         padding: 0,
         overflow: "hidden",
-        borderLeft: "4px solid " + (i.done ? C.success : !i.none && i.state === "over" ? C.danger : C.line)
+        borderLeft: "4px solid " + (i.done ? C.success : !i.none && i.state === "over" ? C.danger : C.line),
+        ...(fl ? {
+          border: "2px solid " + C.danger,
+          background: "#fff5f4"
+        } : {})
       })
+    }, fl && /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.danger,
+        color: "#fff",
+        padding: "8px 13px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap"
+      }
     }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700
+      }
+    }, "\u26A0\uFE0F 沒有存成功", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        marginLeft: 8,
+        opacity: .9
+      }
+    }, fl.error)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: fl.retrying,
+      onClick: e => {
+        e.stopPropagation();
+        retryBill_(month + "|" + c.id, toast);
+      },
+      style: btnS("light", {
+        fontSize: 13,
+        padding: "6px 12px",
+        color: C.danger,
+        opacity: fl.retrying ? .6 : 1
+      })
+    }, fl.retrying ? "送出中…" : "重新送出"), /*#__PURE__*/React.createElement("button", {
+      disabled: fl.retrying,
+      onClick: e => {
+        e.stopPropagation();
+        if (confirm("放棄「" + c.name + "」這次沒存成功的內容？\n\n畫面會改回伺服器上原本的資料。")) dropBill_(month + "|" + c.id, P.reload);
+      },
+      style: btnS("light", {
+        fontSize: 13,
+        padding: "6px 12px",
+        color: C.muted
+      })
+    }, "放棄這張"))), /*#__PURE__*/React.createElement("div", {
       onClick: () => setOpen(isOpen ? null : c.id),
       style: {
         padding: "11px 13px",
@@ -4634,7 +4907,16 @@ function App() {
     id: cur
   }); // 詳情蓋在清單之上
   else if (page === "list") body = /*#__PURE__*/React.createElement(List, null);else body = /*#__PURE__*/React.createElement(Home, null);
-  return /*#__PURE__*/React.createElement("div", null, body, scan && /*#__PURE__*/React.createElement(Scanner, {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(FailBanner, {
+    month: month,
+    setMonth: setMonth,
+    setPage: setPage,
+    setCur: setCur,
+    reload: () => load(month, {
+      noCache: true
+    }),
+    toast: toast
+  }), body, scan && /*#__PURE__*/React.createElement(Scanner, {
     onClose: () => setScan(false),
     onHit: code => {
       setScan(false);

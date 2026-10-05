@@ -1448,7 +1448,22 @@ function BillsPage(P) {
         color: C.blue,
         fontWeight: 600
       }
-    }, "儲存中…")), (b.made || b.sent) && /*#__PURE__*/React.createElement("div", {
+    }, "儲存中…")), !(b.made || b.sent) && (() => {
+      // 本月還沒開單 → 顯示上一次的開單／寄出日期，跟抄表頁的「上次抄表」一樣
+      const lb = data?.lastBill?.[c.id];
+      if (!lb || !(lb.made || lb.sent)) return null;
+      const md = v => {
+        const t = dayOnly(v);
+        return t ? Number(t.slice(5, 7)) + "/" + Number(t.slice(8, 10)) : "";
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: C.grey,
+          marginTop: 3
+        }
+      }, "上次：", lb.made && "開單 " + md(lb.made), lb.made && lb.sent && "　", lb.sent && "寄出 " + md(lb.sent), lb.back && "　已繳回", "（", lb.month, "）");
+    })(), (b.made || b.sent) && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.muted,
@@ -1487,7 +1502,14 @@ function BillsPage(P) {
         fontWeight: 600,
         whiteSpace: "nowrap"
       }
-    }, i.mon, "/", i.day, " \xB7 ", dueText(i))), i.none && /*#__PURE__*/React.createElement("div", {
+    }, i.mon, "/", i.day, " \xB7 ", dueText(i))), !i.done && !i.none && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.grey,
+        marginTop: 4,
+        whiteSpace: "nowrap"
+      }
+    }, i.guess ? "依上月推算 " + i.day + " 號" : "送單日 " + i.day + " 號"), i.none && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.grey,
@@ -1983,7 +2005,12 @@ function App() {
       if (b.back) st = "已繳回";else if (b.sent) st = "已寄出";else if (b.made) st = "已開單";
     }
     const done = st === "已繳回" || noNeed && st === "已寄出";
-    const day = Number(c.bday || 0);
+    // 到期日：跟抄表一樣，先看上一次實際是幾號開單（沒開單日就看寄出日），
+    // 這個月就用同一天當到期日；從來沒有單據紀錄的，才用客戶資料裡的「送單日」
+    const lb = data?.lastBill?.[c.id];
+    const lbDay = lb ? Number(String(lb.made || lb.sent || "").slice(8, 10)) || 0 : 0;
+    const guess = lbDay > 0;
+    const day = guess ? lbDay : Number(c.bday || 0);
     if (!day) return {
       none: true,
       lead,
@@ -2009,6 +2036,8 @@ function App() {
       done,
       b,
       noNeed,
+      guess,
+      lbMonth: guess ? lb.month : "",
       state: diff < 0 ? "over" : diff === 0 ? "today" : diff <= lead ? "soon" : "later"
     };
   }, [data, month]);
@@ -4614,7 +4643,11 @@ function App() {
           marginLeft: 6,
           color: i.st === "未開單" ? C.muted : C.text
         }
-      }, i.st), billTags_(c, month))), /*#__PURE__*/React.createElement(DueBadge, {
+      }, i.st), i.guess && /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginLeft: 6
+        }
+      }, "（依上月推算）"), billTags_(c, month))), /*#__PURE__*/React.createElement(DueBadge, {
         d: i,
         small: true
       }))), /*#__PURE__*/React.createElement("button", {

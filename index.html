@@ -1839,6 +1839,25 @@ function App() {
     const u = toner.url;
     return u ? u + (u.indexOf("?") < 0 ? "?" : "&") + "ticket=" + encodeURIComponent(t.ticketId) : "";
   };
+  /* 碳粉送到了，直接請叫修系統把那張單結案（庫存那邊由叫修系統自己處理，我們不碰） */
+  const [tonerBusy, setTonerBusy] = useState("");
+  const closeTonerTicket = async t => {
+    if (tonerBusy) return;
+    if (!confirm("確定碳粉已經送到「" + (t.clientName || "") + "」了嗎？\n\n按確定會把叫修單 #" + t.ticketId + " 直接結案。")) return;
+    setTonerBusy(t.ticketId);
+    let r;
+    try {
+      r = await api("closeToner", { ticketId: t.ticketId });
+    } catch (e) {
+      r = { ok: false, error: e.message || String(e) };
+    }
+    setTonerBusy("");
+    if (!r || !r.ok) return toast("結案失敗：" + ((r && r.error) || "沒有回應"), 6000);
+    // 先把畫面上的提醒拿掉，再跟叫修系統對一次，確定真的結掉了
+    setToner(prev => ({ ...prev, list: prev.list.filter(x => x.ticketId !== t.ticketId) }));
+    toast(r.already ? "這張單原本就已經結案了" : "叫修單 #" + t.ticketId + " 已結案");
+    loadToner();
+  };
   const shortDay = v => {
     const m = String(v || "").match(/^(\d{4})\/(\d{2})\/(\d{2})/);
     return m ? Number(m[2]) + "/" + Number(m[3]) : "";
@@ -2583,7 +2602,22 @@ function App() {
           color: C.muted,
           marginTop: 2
         }
-      }, t.desc)), link && /*#__PURE__*/React.createElement("a", {
+      }, t.desc)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          gap: 6,
+          flexShrink: 0
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => closeTonerTicket(t),
+        disabled: tonerBusy === t.ticketId,
+        style: btnS("accent", {
+          fontSize: 13,
+          padding: "8px 12px",
+          whiteSpace: "nowrap",
+          opacity: tonerBusy === t.ticketId ? .5 : 1
+        })
+      }, tonerBusy === t.ticketId ? "處理中…" : "送好了，結案"), link && /*#__PURE__*/React.createElement("a", {
         href: link,
         target: "_blank",
         rel: "noopener",
@@ -2593,17 +2627,16 @@ function App() {
           padding: "8px 12px",
           whiteSpace: "nowrap",
           textDecoration: "none",
-          color: C.blue,
-          flexShrink: 0
+          color: C.blue
         })
-      }, "開叫修單結案"));
+      }, "開叫修單")));
     }), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.muted,
         marginTop: 8
       }
-    }, "送完後在叫修單選好碳粉、填維修內容按「已完成」，這個提醒就會消失")), /*#__PURE__*/React.createElement("div", {
+    }, "碳粉送到就按「送好了，結案」，叫修單會直接結掉，不用再跑去叫修系統。 如果這張單還要補填維修內容或更換零件，才需要「開叫修單」。")), /*#__PURE__*/React.createElement("div", {
       style: card()
     }, /*#__PURE__*/React.createElement("div", {
       style: {

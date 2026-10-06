@@ -2444,6 +2444,42 @@ function App() {
     });
   }
 
+  /* 一間有好幾台時,把每台的照片都列出來;只有一台就跟以前一樣顯示一張 */
+  function PhotoSet({
+    cl,
+    w
+  }) {
+    const list = (cl && cl.photos && cl.photos.length)
+      ? cl.photos
+      : (cl && cl.photo ? [{ unit: 1, id: cl.photo, url: cl.link }] : []);
+    if (!list.length) return null;
+    if (list.length === 1) return /*#__PURE__*/React.createElement(Photo, {
+      id: list[0].id,
+      link: list[0].url,
+      w: w || 600
+    });
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(2, 1fr)",
+        gap: 8
+      }
+    }, list.map(p => /*#__PURE__*/React.createElement("div", {
+      key: p.unit
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 4,
+        fontWeight: 600
+      }
+    }, "第 ", p.unit, " 台"), /*#__PURE__*/React.createElement(Photo, {
+      id: p.id,
+      link: p.url,
+      w: 400
+    }))));
+  }
+
   /* ══════ 客戶詳情 ══════ */
   function Detail({
     id
@@ -2807,16 +2843,28 @@ function App() {
         fontWeight: 700,
         color: stColor
       }
-    }, "\u672C\u6708\uFF1A", cl.status), /*#__PURE__*/React.createElement("span", {
+    }, "\u672C\u6708\uFF1A", cl.status, (cl.units > 1 ? "\uFF08" + (cl.shot || 0) + "/" + cl.units + " \u53F0\uFF09" : "")), /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.muted,
         fontSize: 13
       }
-    }, fmtShort(cl.time))), cl.photo && /*#__PURE__*/React.createElement(Photo, {
-      id: cl.photo,
-      link: cl.link,
+    }, fmtShort(cl.time))), /*#__PURE__*/React.createElement(PhotoSet, {
+      cl: cl,
       w: 600
-    }), cl.status === "退回" && /*#__PURE__*/React.createElement("div", {
+    }), cl.status === "進行中" && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPrev(page);
+        setPage("clean");
+      },
+      style: btnS("primary", {
+        width: "100%",
+        padding: "14px"
+      })
+    }, "繼續拍（還差 " + Math.max(0, (cl.units || 1) - (cl.shot || 0)) + " 台）")), cl.status === "退回" && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 10,
         padding: 10,
@@ -2858,22 +2906,47 @@ function App() {
   }
 
   /* ══════ 清潔上傳 ══════ */
+  /* 一間只有一台(絕大多數):跟以前一樣,拍一張 → 送出申報。
+     一間有好幾台(例如新亞楠梓 8 台):一台拍一張,拍完就立刻上傳,
+     中途手機沒電或關掉也不會白拍,回來接著拍剩下的就好。 */
   function CleanUp({
     id
   }) {
     const c = byId[id];
+    const units = Math.max(1, Number(c.units) || 1);
+    const cur = (data.clean || {})[c.id] || null;
+    const multi = units > 1;
+
     const [ph, setPh] = useState(null);
     const [up, setUp] = useState(false);
     const [er, setEr] = useState("");
+    const [busyUnit, setBusyUnit] = useState(0);
+
+    /* 已經拍好的照片:第幾台 → 照片 */
+    const shotMap = {};
+    ((cur && cur.photos) || []).forEach(p => {
+      shotMap[p.unit] = p;
+    });
+    const shotCount = Object.keys(shotMap).length;
+    const nextUnit = (() => {
+      for (let u = 1; u <= units; u++) if (!shotMap[u]) return u;
+      return 0;
+    })();
+
+    function cap_() {
+      return c.name + "\n" + new Date().toLocaleString("zh-TW", {
+        hour12: false
+      });
+    }
+
+    /* ---- 單台:維持原本「先預覽再送出」 ---- */
     async function pick(e) {
       const f = e.target.files && e.target.files[0];
+      e.target.value = "";
       if (!f) return;
       setEr("");
       try {
-        const cap = c.name + "\n" + new Date().toLocaleString("zh-TW", {
-          hour12: false
-        });
-        setPh(await processPhoto(f, cap));
+        setPh(await processPhoto(f, cap_()));
       } catch (err) {
         setEr(err.message);
       }
@@ -2893,25 +2966,128 @@ function App() {
       });
       setUp(false);
       if (!r.ok) return setEr(r.error);
+      applyClean_(r);
+      setPage(prev);
+      setCur(c.id);
+      toast("已送出，等待主管審核");
+    }
+
+    /* ---- 多台:拍一張就直接上傳那一台 ---- */
+    async function pickUnit(e, unit) {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (!user) return setEr("請先在首頁選擇操作人員");
+      setEr("");
+      setBusyUnit(unit);
+      let shot;
+      try {
+        shot = await processPhoto(f, c.name + "　第" + unit + "台\n" + new Date().toLocaleString("zh-TW", {
+          hour12: false
+        }));
+      } catch (err) {
+        setBusyUnit(0);
+        return setEr(err.message);
+      }
+      const r = await api("cleanSubmit", {
+        month,
+        id: c.id,
+        owner: c.owner,
+        name: c.name,
+        photo: shot.base64,
+        mime: "image/jpeg",
+        unit
+      });
+      setBusyUnit(0);
+      if (!r.ok) return setEr(r.error);
+      applyClean_(r);
+      if (r.done) {
+        setPage(prev);
+        setCur(c.id);
+        toast("8 台都拍好了，已送出等待主管審核".replace("8", String(r.units)));
+      } else {
+        toast("第 " + unit + " 台好了，還差 " + Math.max(0, r.units - r.shot) + " 台");
+      }
+    }
+
+    async function dropUnit(unit) {
+      if (!confirm("刪掉第 " + unit + " 台的照片，重拍一張？")) return;
+      setBusyUnit(unit);
+      const r = await api("cleanDrop", {
+        month,
+        id: c.id,
+        unit
+      });
+      setBusyUnit(0);
+      if (!r.ok) return setEr(r.error);
+      if (r.removed) {
+        setData(d => {
+          const n = { ...d.clean };
+          delete n[c.id];
+          return { ...d, clean: n };
+        });
+      } else applyClean_(r);
+      toast("已刪掉第 " + unit + " 台，可以重拍");
+    }
+
+    async function forceSend() {
+      const why = prompt("有機器今天沒辦法清嗎？寫一下原因，主管審核時看得到：", "");
+      if (why === null) return;
+      setUp(true);
+      const r = await api("cleanForce", {
+        month,
+        id: c.id,
+        reason: why
+      });
+      setUp(false);
+      if (!r.ok) return setEr(r.error);
       setData(d => ({
         ...d,
         clean: {
           ...d.clean,
           [c.id]: {
-            time: r.time,
-            photo: r.photo,
-            link: r.link,
+            ...(d.clean[c.id] || {}),
             status: "待審核",
-            by: c.owner
+            reason: r.note || ""
           }
         }
       }));
       setPage(prev);
       setCur(c.id);
-      toast("已送出，等待主管審核");
+      toast("已送出（" + r.shot + "/" + r.units + " 台），等待主管審核");
     }
+
+    function applyClean_(r) {
+      setData(d => ({
+        ...d,
+        clean: {
+          ...d.clean,
+          [c.id]: {
+            time: r.time || (d.clean[c.id] || {}).time || "",
+            photo: r.photo || "",
+            link: r.link || "",
+            photos: r.photos || [],
+            units: r.units || units,
+            shot: r.shot || 0,
+            status: r.status || "待審核",
+            by: c.owner
+          }
+        }
+      }));
+    }
+
+    /* ---- 畫面 ---- */
+    const tip = /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: C.muted,
+        lineHeight: 1.7,
+        marginBottom: 12
+      }
+    }, "請拍攝", /*#__PURE__*/React.createElement("b", null, "清潔完成後的機器內部"), "，需看得出實際保養部位。 照片會自動壓上客戶名稱與拍攝時間。");
+
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Head, {
-      title: "\u6DF1\u5EA6\u6E05\u6F54\u7533\u5831",
+      title: "深度清潔申報",
       back: () => setPage(prev)
     }), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -2932,20 +3108,103 @@ function App() {
         fontSize: 13,
         marginTop: 4
       }
-    }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner)), /*#__PURE__*/React.createElement("div", {
+    }, c.id, "　·　", c.dist, "　·　", c.owner), multi && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: "10px 12px",
+        background: C.blueBg,
+        border: "1px solid #c5daed",
+        borderRadius: 8,
+        fontSize: 15,
+        fontWeight: 700,
+        color: C.blue
+      }
+    }, "這間有 " + units + " 台　·　已拍 " + shotCount + " / " + units + " 台")),
+
+    multi ? /*#__PURE__*/React.createElement("div", {
       style: card()
     }, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "\u6E05\u6F54\u5F8C\u7167\u7247\uFF08\u6A5F\u5668\u5167\u90E8\u4FDD\u990A\uFF09"), /*#__PURE__*/React.createElement("div", {
+    }, "每台各拍一張（機器內部保養）"), tip, /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 13,
-        color: C.muted,
-        lineHeight: 1.7,
-        marginBottom: 12
+        display: "grid",
+        gridTemplateColumns: "repeat(2, 1fr)",
+        gap: 10
       }
-    }, "\u8ACB\u62CD\u651D", /*#__PURE__*/React.createElement("b", null, "\u6E05\u6F54\u5B8C\u6210\u5F8C\u7684\u6A5F\u5668\u5167\u90E8"), "\uFF0C\u9700\u770B\u5F97\u51FA\u5BE6\u969B\u4FDD\u990A\u90E8\u4F4D\u3002 \u7167\u7247\u6703\u81EA\u52D5\u58D3\u4E0A\u5BA2\u6236\u540D\u7A31\u8207\u62CD\u651D\u6642\u9593\u3002"), ph ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("img", {
+    }, Array.from({
+      length: units
+    }, (_, i) => i + 1).map(u => {
+      const got = shotMap[u];
+      const busy = busyUnit === u;
+      return /*#__PURE__*/React.createElement("div", {
+        key: u,
+        style: {
+          border: "1px solid " + (got ? C.line : "#c9d4e0"),
+          borderStyle: got ? "solid" : "dashed",
+          borderRadius: 10,
+          padding: 8,
+          background: got ? "#fff" : (u === nextUnit ? C.blueBg : "#fafbfc")
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          fontWeight: 700,
+          marginBottom: 6,
+          color: got ? C.text : (u === nextUnit ? C.blue : C.muted)
+        }
+      }, "第 " + u + " 台", got ? "　✓" : (u === nextUnit ? "　← 換這台" : "")), got ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Photo, {
+        id: got.id,
+        link: got.url,
+        w: 400
+      }), /*#__PURE__*/React.createElement("button", {
+        onClick: () => dropUnit(u),
+        disabled: busy,
+        style: {
+          ...btnS("light"),
+          width: "100%",
+          marginTop: 6,
+          fontSize: 13,
+          padding: "8px"
+        }
+      }, busy ? "處理中…" : "重拍這台")) : /*#__PURE__*/React.createElement("label", {
+        style: {
+          ...btnS(u === nextUnit ? "primary" : "light", {
+            padding: "26px 8px",
+            fontSize: 15
+          }),
+          display: "block",
+          textAlign: "center",
+          opacity: busy ? .5 : 1
+        }
+      }, busy ? "上傳中…" : "📷　拍這台", /*#__PURE__*/React.createElement("input", {
+        type: "file",
+        accept: "image/*",
+        capture: "environment",
+        disabled: busy,
+        onChange: e => pickUnit(e, u),
+        style: {
+          display: "none"
+        }
+      })));
+    })), shotCount > 0 && shotCount < units && /*#__PURE__*/React.createElement("button", {
+      onClick: forceSend,
+      disabled: up,
+      style: {
+        ...btnS("light"),
+        width: "100%",
+        marginTop: 12,
+        fontSize: 14,
+        color: C.muted
+      }
+    }, up ? "送出中…" : "有機器今天清不了，先送審這 " + shotCount + " 台")) :
+
+    /*#__PURE__*/React.createElement("div", {
+      style: card()
+    }, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "清潔後照片（機器內部保養）"), tip, ph ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("img", {
       src: ph.preview,
-      alt: "\u9810\u89BD",
+      alt: "預覽",
       style: {
         width: "100%",
         borderRadius: 8,
@@ -2957,13 +3216,13 @@ function App() {
         color: C.muted,
         margin: "8px 0"
       }
-    }, "\u58D3\u7E2E\u5F8C\u7D04 ", ph.kb, " KB"), /*#__PURE__*/React.createElement("label", {
+    }, "壓縮後約 ", ph.kb, " KB"), /*#__PURE__*/React.createElement("label", {
       style: {
         ...btnS("light"),
         display: "block",
         textAlign: "center"
       }
-    }, "\u91CD\u65B0\u62CD\u7167", /*#__PURE__*/React.createElement("input", {
+    }, "重新拍照", /*#__PURE__*/React.createElement("input", {
       type: "file",
       accept: "image/*",
       capture: "environment",
@@ -2980,7 +3239,7 @@ function App() {
         display: "block",
         textAlign: "center"
       }
-    }, "\uD83D\uDCF7\u3000\u958B\u555F\u76F8\u6A5F\u62CD\u7167", /*#__PURE__*/React.createElement("input", {
+    }, "📷　開啟相機拍照", /*#__PURE__*/React.createElement("input", {
       type: "file",
       accept: "image/*",
       capture: "environment",
@@ -2988,7 +3247,9 @@ function App() {
       style: {
         display: "none"
       }
-    }))), er && /*#__PURE__*/React.createElement("div", {
+    }))),
+
+    er && /*#__PURE__*/React.createElement("div", {
       style: {
         ...card({
           background: "#fdecea",
@@ -2997,7 +3258,7 @@ function App() {
         color: C.danger,
         fontSize: 14
       }
-    }, er), /*#__PURE__*/React.createElement("button", {
+    }, er), !multi && /*#__PURE__*/React.createElement("button", {
       onClick: send,
       disabled: !ph || up,
       style: btnS("accent", {
@@ -3099,9 +3360,19 @@ function App() {
           fontSize: 13,
           margin: "4px 0 10px"
         }
-      }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, "\u3000\xB7\u3000", fmtShort(cl.time)), /*#__PURE__*/React.createElement(Photo, {
-        id: cl.photo,
-        link: cl.link,
+      }, c.id, "\u3000\xB7\u3000", c.dist, "\u3000\xB7\u3000", c.owner, "\u3000\xB7\u3000", fmtShort(cl.time), (cl.units > 1 ? "\u3000\u00b7\u3000" + (cl.shot || 0) + "/" + cl.units + " \u53f0" : "")), cl.reason && /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: 10,
+          padding: "8px 10px",
+          background: C.warnBg,
+          border: "1px solid #eedcbe",
+          borderRadius: 8,
+          fontSize: 13,
+          color: C.warn,
+          fontWeight: 600
+        }
+      }, "\u26a0 ", cl.reason), /*#__PURE__*/React.createElement(PhotoSet, {
+        cl: cl,
         w: 800
       }), /*#__PURE__*/React.createElement("a", {
         href: cl.link,
@@ -3705,7 +3976,8 @@ function App() {
       rtn: RTNS[0],
       over: "",
       rent: "",
-      anchor: ""
+      anchor: "",
+      units: 1
     });
     // 目前這一欄該選哪個選項（舊的「季/半年/年」也對得起來）
     const modeOf = v => {
@@ -3756,7 +4028,8 @@ function App() {
         rtn: f.rtn || RTNS[0],
         over: String(f.over || "").trim(),
         rent: String(f.rent || "").trim(),
-        anchor: String(f.anchor || "").trim()
+        anchor: String(f.anchor || "").trim(),
+        units: Math.min(30, Math.max(1, Number(f.units) || 1))
       };
       // 修改既有客戶：畫面先更新、背景存檔，不用等網路（新增客戶還是要等，因為要確認編號沒撞到）
       if (editId) {
@@ -3880,6 +4153,29 @@ function App() {
       key: d,
       value: d
     }))), /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "\u73FE\u5834\u53F0\u6578"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: 1,
+      max: 30,
+      value: f.units ?? 1,
+      onChange: e => setF({
+        ...f,
+        units: e.target.value
+      }),
+      style: inp({
+        marginBottom: 4
+      }),
+      inputMode: "numeric",
+      placeholder: "1"
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, "\u9019\u9593\u73FE\u5834\u6709\u5E7E\u53F0\u6A5F\u5668\u3002\u4E00\u822C\u90FD\u662F 1 \u53F0\uFF0C\u4E0D\u7528\u6539\u3002 \u586B\u5E7E\u53F0\uFF0C\u6DF1\u5EA6\u6E05\u6F54\u5C31\u8981\u62CD\u5E7E\u5F35\u7167\u7247\uFF0C\u7CFB\u7D71\u6703\u4E00\u53F0\u4E00\u53F0\u5E36\u8457\u6280\u5E2B\u62CD\u5B8C\u3002"), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u6284\u8868\u9031\u671F"), /*#__PURE__*/React.createElement("select", {
       value: Number(f.cycle ?? 1),

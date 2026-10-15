@@ -674,6 +674,24 @@ function MonthPicker({ value, onChange }) {
 }
 
 /* 單據列表上的小標籤：本月不寄單／只寄租金／本月結超出 */
+/* 送單方式小標籤：寄出／親送（沒設定就不顯示） */
+function sendTag_(c) {
+  const v = c && c.send;
+  if (v !== "寄出" && v !== "親送") return null;
+  const hand = v === "親送";
+  return /*#__PURE__*/React.createElement("span", {
+    key: "send",
+    style: {
+      marginLeft: 6,
+      padding: "1px 7px",
+      borderRadius: 999,
+      background: hand ? "#f3ecfa" : "#eef1f5",
+      color: hand ? "#7a4fa3" : "#5b6b7c",
+      fontWeight: 700,
+      whiteSpace: "nowrap"
+    }
+  }, hand ? "親送" : "寄出");
+}
 function billTags_(c, month) {
   const pill = (text, bg, color) => /*#__PURE__*/React.createElement("span", {
     key: text,
@@ -687,9 +705,10 @@ function billTags_(c, month) {
       whiteSpace: "nowrap"
     }
   }, text);
-  if (!rentDue_(c, month)) return [pill("本月不寄單", "#eee", C.muted)];
+  const st = sendTag_(c);
+  if (!rentDue_(c, month)) return [st, pill("本月不寄單", "#eee", C.muted)];
   const o = overInfo_(c, month);
-  return o ? [pill(o.text, o.settle ? C.warnBg : C.blueBg, o.settle ? C.warn : C.blue)] : null;
+  return [st, o ? pill(o.text, o.settle ? C.warnBg : C.blueBg, o.settle ? C.warn : C.blue) : null];
 }
 
 const dueText = d => d.none ? "" : d.state === "over" ? "逾期 " + Math.abs(d.diff) + " 天" : d.state === "today" ? "今天到期" : "還有 " + d.diff + " 天";
@@ -1070,6 +1089,7 @@ function BillsPage(P) {
   const [bo, setBo] = useState("全部");
   const [bd, setBd] = useState("全部");
   const [bs, setBs] = useState("待處理");
+  const [bm, setBm] = useState("全部"); // 送單方式篩選：全部／寄出／親送／未設定
   const [bk, setBk] = useState("");
   const [open, setOpen] = useState(null); // 展開編輯的客戶 id
   const [saving, setSaving] = useState(() => {
@@ -1110,6 +1130,7 @@ function BillsPage(P) {
       if (c.active === false) return false;
       if (bo !== "全部" && c.owner !== bo) return false;
       if (bd !== "全部" && c.dist !== bd) return false;
+      if (bm !== "全部" && (c.send || "未設定") !== bm) return false;
       if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
       const i = billInfo(c);
       // 剛完成的那筆若正展開著就先留下，方便按錯時馬上取消
@@ -1131,7 +1152,7 @@ function BillsPage(P) {
       if (va !== vb) return va - vb;
       return a.id < b.id ? -1 : 1;
     });
-  }, [clients, bo, bd, bs, bk, billInfo, open, failed, month, failedCount]);
+  }, [clients, bo, bd, bs, bm, bk, billInfo, open, failed, month, failedCount]);
   const dists = useMemo(() => Array.from(new Set(clients.filter(c => bo === "全部" || c.owner === bo).map(c => c.dist).filter(Boolean))).sort(), [clients, bo]);
   const tally = useMemo(() => {
     const o = {
@@ -1343,7 +1364,30 @@ function BillsPage(P) {
       fontSize: 13,
       padding: "8px"
     })
-  }, /*#__PURE__*/React.createElement("option", null, "\u5F85\u8655\u7406"), /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u672A\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u5BC4\u51FA"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u7E73\u56DE")))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("option", null, "\u5F85\u8655\u7406"), /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u672A\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u5BC4\u51FA"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u7E73\u56DE"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 8,
+      flexWrap: "wrap"
+    }
+  }, ["全部", "寄出", "親送", "未設定"].map(k => {
+    const on = bm === k;
+    const n = k === "全部" ? null : clients.filter(c => c.active !== false && (c.send || "未設定") === k).length;
+    return /*#__PURE__*/React.createElement("button", {
+      key: k,
+      onClick: () => setBm(k),
+      style: {
+        padding: "6px 12px",
+        borderRadius: 99,
+        fontSize: 13,
+        fontWeight: 600,
+        background: on ? C.navy : "#fff",
+        color: on ? "#fff" : C.text,
+        border: "1.5px solid " + (on ? C.navy : C.line)
+      }
+    }, k, n === null ? "" : " " + n);
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: C.muted
@@ -1353,6 +1397,10 @@ function BillsPage(P) {
     const b = i.b || {};
     const isOpen = open === c.id;
     const fl = failed[month + "|" + c.id];
+    const isMail = c.send === "寄出";
+    const isHand = c.send === "親送";
+    const sw = isHand ? "送達" : "寄出"; // 親送的「寄出」改叫「送達」
+    const stText = isHand && i.st === "已寄出" ? "已送達" : i.st;
     return /*#__PURE__*/React.createElement("div", {
       key: c.id,
       style: card({
@@ -1488,7 +1536,7 @@ function BillsPage(P) {
         fontWeight: 700,
         color: stColor[i.st]
       }
-    }, i.st), !i.done && !i.none && i.diff <= i.lead && /*#__PURE__*/React.createElement("div", {
+    }, stText), !i.done && !i.none && i.diff <= i.lead && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 4
       }
@@ -1523,13 +1571,13 @@ function BillsPage(P) {
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr",
+        gridTemplateColumns: isMail ? "1fr 1fr" : "1fr 1fr 1fr",
         gap: 6,
         margin: "12px 0 8px",
         textAlign: "center",
         fontSize: 12
       }
-    }, [["① 開單", b.made], ["② 寄出", b.sent], ["③ 繳回", i.noNeed ? "—" : b.back ? b.bdate || "已繳回" : ""]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+    }, (isMail ? [["① 開單", b.made], ["② 寄出", b.sent]] : [["① 開單", b.made], ["② " + sw, b.sent], ["③ 繳回", i.noNeed ? "—" : b.back ? b.bdate || "已繳回" : ""]]).map(([k, v]) => /*#__PURE__*/React.createElement("div", {
       key: k,
       style: {
         padding: "7px 3px",
@@ -1552,17 +1600,17 @@ function BillsPage(P) {
         color: C.warn,
         marginBottom: 8
       }
-    }, "\u5DF2\u958B\u55AE ", waitDays(b.made), " \u5929\u9084\u6C92\u5BC4\u51FA"), /*#__PURE__*/React.createElement("div", {
+    }, "\u5DF2\u958B\u55AE ", waitDays(b.made), " \u5929\u9084\u6C92" + sw), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 1fr",
+        gridTemplateColumns: isMail ? "1fr 1fr" : "1fr 1fr 1fr",
         gap: 6,
         marginBottom: 12
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         if (b.made) {
-          if (!confirm("取消開單？\\n\\n寄出和繳回的紀錄也會一併清除。")) return;
+          if (!confirm(isMail ? "取消開單？\n\n寄出的紀錄也會一併清除。" : "取消開單？\n\n" + sw + "和繳回的紀錄也會一併清除。")) return;
           push(c, {
             made: "",
             sent: "",
@@ -1594,7 +1642,7 @@ function BillsPage(P) {
         padding: "11px 4px",
         color: b.sent ? C.danger : "#fff"
       })
-    }, b.sent ? "取消寄出" : "今天寄出"), /*#__PURE__*/React.createElement("button", {
+    }, b.sent ? "取消" + sw : "今天" + sw), !isMail && /*#__PURE__*/React.createElement("button", {
       disabled: i.noNeed,
       onClick: () => push(c, b.back ? {
         back: false,
@@ -1617,7 +1665,7 @@ function BillsPage(P) {
         color: C.muted,
         marginBottom: 10
       }
-    }, "\u7E73\u56DE\u65B9\u5F0F\uFF1A", c.rtn, "\u3000\xB7\u3000\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定"), /*#__PURE__*/React.createElement("div", {
+    }, isMail ? "送單方式：寄出（不需繳回）" : (isHand ? "送單方式：親送　·　" : "") + "繳回方式：" + c.rtn, "\u3000\xB7\u3000\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -1636,7 +1684,7 @@ function BillsPage(P) {
       })
     })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, "\u5BC4\u51FA\u65E5"), /*#__PURE__*/React.createElement("input", {
+    }, sw + "日"), /*#__PURE__*/React.createElement("input", {
       type: "date",
       value: toInput(b.sent),
       onChange: e => push(c, {
@@ -1656,7 +1704,7 @@ function BillsPage(P) {
       style: inp({
         fontSize: 14
       })
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    })), !isMail && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u7E73\u56DE\u65E5"), /*#__PURE__*/React.createElement("input", {
       type: "date",
@@ -2006,7 +2054,8 @@ function App() {
       inactive: true
     };
     const b = data?.bills?.[c.id];
-    const noNeed = (c.rtn || "") === "不需繳回";
+    // 送單方式「寄出」＝寄出就完成，不需繳回；親送／沒設定 → 照繳回方式
+    const noNeed = c.send === "寄出" || (c.rtn || "") === "不需繳回";
     // 租金不是每個月寄的客戶,不是他的月份就完全不列入(不催、不算逾期、不進統計)
     if (!rentDue_(c, month)) return {
       none: true,
@@ -2661,7 +2710,7 @@ function App() {
         fontSize: 12,
         color: C.muted
       }
-    }, "\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定", "\u3000\xB7\u3000\u7E73\u56DE\uFF1A", c.rtn || "技師繳回簽收聯"), /*#__PURE__*/React.createElement("div", {
+    }, "\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定", c.send === "寄出" ? "\u3000\xB7\u3000寄出（不需繳回）" : (c.send === "親送" ? "\u3000\xB7\u3000親送" : "") + "\u3000\xB7\u3000\u7E73\u56DE\uFF1A" + (c.rtn || "技師繳回簽收聯")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -2884,7 +2933,28 @@ function App() {
     }, fmtShort(cl.time))), /*#__PURE__*/React.createElement(PhotoSet, {
       cl: cl,
       w: 600
-    }), cl.status === "進行中" && /*#__PURE__*/React.createElement("div", {
+    }), cl.status === "已通過" && (Number(c.units) || 1) > (cl.shot || 1) && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        padding: 10,
+        background: C.blueBg,
+        border: "1px solid #c5daed",
+        borderRadius: 8,
+        fontSize: 13,
+        lineHeight: 1.7
+      }
+    }, "客戶資料現在是 ", /*#__PURE__*/React.createElement("b", null, Number(c.units) || 1, " 台"), "，這次只拍了 ", cl.shot || 1, " 台就通過了。補拍其餘的台數，原本通過的照片會保留，拍滿後整組重新送主管審核。", /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        if (!confirm("補拍其餘 " + ((Number(c.units) || 1) - (cl.shot || 1)) + " 台？\n\n拍第一張後，這筆會從「已通過」改回「進行中」，拍滿再重新送審。")) return;
+        setPrev(page);
+        setPage("clean");
+      },
+      style: btnS("primary", {
+        width: "100%",
+        padding: "14px",
+        marginTop: 8
+      })
+    }, "補拍其餘 " + ((Number(c.units) || 1) - (cl.shot || 1)) + " 台")), cl.status === "進行中" && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 10
       }
@@ -3549,6 +3619,8 @@ function App() {
     const [doRent, setDoRent] = useState(true);
     const [doOver, setDoOver] = useState(true);
     const [doAnchor, setDoAnchor] = useState(true);
+    const [send, setSend] = useState("寄出");
+    const [doSend, setDoSend] = useState(false); // 預設不勾，要改送單方式才勾
     const [busyB, setBusyB] = useState(false);
     const dists = Array.from(new Set(clients.map(c => c.dist).filter(Boolean))).sort();
     const list = clients.filter(c => {
@@ -3562,13 +3634,14 @@ function App() {
     const opts = CYCLE_OPTS.concat([{ v: "不計", label: "不計（只寄租金）" }]);
     async function apply() {
       if (!picked.length) return toast("請先勾選客戶");
-      if (!doRent && !doOver && !doAnchor) return toast("請至少勾一項要設定的東西");
+      if (!doRent && !doOver && !doAnchor && !doSend) return toast("請至少勾一項要設定的東西");
       setBusyB(true);
       const r = await api("bulkCycle", {
         ids: picked.map(c => c.id),
         setRent: doRent, rent: doRent ? rent : "",
         setOver: doOver, over: doOver ? over : "",
-        setAnchor: doAnchor, anchor: doAnchor ? anchor : ""
+        setAnchor: doAnchor, anchor: doAnchor ? anchor : "",
+        setSend: doSend, send: doSend ? send : ""
       });
       setBusyB(false);
       if (!r.ok) return toast("失敗：" + r.error, 5000);
@@ -3579,7 +3652,7 @@ function App() {
     const row = (label, node) => /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 4 } }, label), node);
     return /*#__PURE__*/React.createElement("div", null,
-      /*#__PURE__*/React.createElement(Head, { title: "批次設定週期", back: () => setPage("list") }),
+      /*#__PURE__*/React.createElement(Head, { title: "批次設定週期／送單方式", back: () => setPage("list") }),
       /*#__PURE__*/React.createElement("div", { style: card() },
         /*#__PURE__*/React.createElement("b", { style: { fontSize: 15 } }, "1. 先挑要設定的客戶"),
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
@@ -3599,7 +3672,7 @@ function App() {
           },
             /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: !!sel[c.id], onChange: e => setSel({ ...sel, [c.id]: e.target.checked }), style: { width: 18, height: 18 } }),
             /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, c.name),
-            /*#__PURE__*/React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, c.id, "　", cycleDesc_(c.rent, c.anchor, month)))))),
+            /*#__PURE__*/React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, c.id, "　", cycleDesc_(c.rent, c.anchor, month)), sendTag_(c))))),
       /*#__PURE__*/React.createElement("div", { style: card() },
         /*#__PURE__*/React.createElement("b", { style: { fontSize: 15 } }, "2. 要套用什麼設定"),
         /*#__PURE__*/React.createElement("div", { style: { marginTop: 8 } },
@@ -3613,9 +3686,15 @@ function App() {
               opts.map(o => /*#__PURE__*/React.createElement("option", { key: o.v, value: o.v }, o.label)))),
           row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
               /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doAnchor, onChange: e => setDoAnchor(e.target.checked) }), "從哪一期開始"),
-            /*#__PURE__*/React.createElement("input", { type: "month", value: anchor, disabled: !doAnchor, onChange: e => setAnchor(e.target.value), style: inp({ marginBottom: 0 }) }))),
+            /*#__PURE__*/React.createElement("input", { type: "month", value: anchor, disabled: !doAnchor, onChange: e => setAnchor(e.target.value), style: inp({ marginBottom: 0 }) })),
+          row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doSend, onChange: e => setDoSend(e.target.checked) }), "送單方式"),
+            /*#__PURE__*/React.createElement("select", { value: send, disabled: !doSend, onChange: e => setSend(e.target.value), style: inp({ marginBottom: 0 }) },
+              /*#__PURE__*/React.createElement("option", { value: "寄出" }, "寄出（郵寄，不需繳回）"),
+              /*#__PURE__*/React.createElement("option", { value: "親送" }, "親送（技師送到客戶那邊）"),
+              /*#__PURE__*/React.createElement("option", { value: "" }, "未設定（照以前的方式）")))),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.blue, background: C.blueBg, borderRadius: 8, padding: "8px 10px", margin: "4px 0 10px", lineHeight: 1.7 } },
-          "套用後：租金 ", doRent ? cycleDesc_(rent, anchor, month) : "不變", "；超出 ", doOver ? cycleDesc_(over, anchor, month) : "不變", "。沒勾的項目不會動到。"),
+          "套用後：租金 ", doRent ? cycleDesc_(rent, anchor, month) : "不變", "；超出 ", doOver ? cycleDesc_(over, anchor, month) : "不變", "；送單方式 ", doSend ? (send || "未設定") : "不變", "。沒勾的項目不會動到。"),
         /*#__PURE__*/React.createElement("button", { onClick: apply, disabled: busyB || !picked.length, style: btnS("primary", { width: "100%" }) },
           busyB ? "套用中…" : "套用到已勾的 " + picked.length + " 間")));
   }
@@ -4007,6 +4086,7 @@ function App() {
       cycle: 1,
       bday: "",
       rtn: RTNS[0],
+      send: "",
       over: "",
       rent: "",
       anchor: "",
@@ -4062,7 +4142,8 @@ function App() {
         over: String(f.over || "").trim(),
         rent: String(f.rent || "").trim(),
         anchor: String(f.anchor || "").trim(),
-        units: Math.min(30, Math.max(1, Number(f.units) || 1))
+        units: Math.min(30, Math.max(1, Number(f.units) || 1)),
+        send: f.send === "寄出" || f.send === "親送" ? f.send : ""
       };
       // 修改既有客戶：畫面先更新、背景存檔，不用等網路（新增客戶還是要等，因為要確認編號沒撞到）
       if (editId) {
@@ -4277,6 +4358,30 @@ function App() {
       }
     }, "\u55AE\u64DA\u7BA1\u7406\u9801\u6703\u7528\u9019\u500B\u7B97\u5012\u6578\u63D0\u9192\u3002\u7559\u7A7A\u7684\u8A71\u4E0D\u6703\u63D0\u9192\uFF0C\u53EA\u986F\u793A\u72C0\u614B\u3002"), /*#__PURE__*/React.createElement("span", {
       style: lbl
+    }, "送單方式"), /*#__PURE__*/React.createElement("select", {
+      value: f.send || "",
+      onChange: e => setF({
+        ...f,
+        send: e.target.value
+      }),
+      style: inp({
+        marginBottom: 4
+      })
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "未設定（照以前的方式）"), /*#__PURE__*/React.createElement("option", {
+      value: "寄出"
+    }, "寄出（郵寄，不需繳回）"), /*#__PURE__*/React.createElement("option", {
+      value: "親送"
+    }, "親送（技師送到客戶那邊）")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 12,
+        lineHeight: 1.7
+      }
+    }, f.send === "寄出" ? "寄出的客戶，單據管理只有「開單 → 寄出」兩步，寄出就算完成。" : f.send === "親送" ? "親送的客戶，單據管理是「開單 → 送達 → 繳回」，下面選繳回方式。" : "還沒設定的客戶完全照以前的方式運作，等你有空再一間一間設定。"), f.send !== "寄出" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
     }, "\u7E73\u56DE\u65B9\u5F0F"), /*#__PURE__*/React.createElement("select", {
       value: f.rtn || RTNS[0],
       onChange: e => setF({
@@ -4286,9 +4391,9 @@ function App() {
       style: inp({
         marginBottom: 12
       })
-    }, RTNS.map(x => /*#__PURE__*/React.createElement("option", {
+    }, (f.send === "親送" ? ["技師繳回簽收聯", "技師收款後繳回", "不需繳回"].concat(f.rtn && RTNS.indexOf(f.rtn) >= 0 && ["技師繳回簽收聯", "技師收款後繳回", "不需繳回"].indexOf(f.rtn) < 0 ? [f.rtn] : []) : RTNS).map(x => /*#__PURE__*/React.createElement("option", {
       key: x
-    }, x))), /*#__PURE__*/React.createElement("span", {
+    }, x)))), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "租金週期（多久寄一次帳單）"), /*#__PURE__*/React.createElement("select", {
       value: rentMode,
@@ -4514,7 +4619,7 @@ function App() {
         marginBottom: 10,
         fontSize: 14
       })
-    }, "批次設定租金／超出週期"), /*#__PURE__*/React.createElement("div", {
+    }, "批次設定租金／超出週期／送單方式"), /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "12px 14px",
         background: "#fff",

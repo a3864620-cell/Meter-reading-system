@@ -2182,7 +2182,10 @@ function App() {
         reject: 0,
         goal,
         off: 0,
-        adhoc: 0
+        adhoc: 0,
+        passU: 0,
+        waitU: 0,
+        rejectU: 0
       };
       if (c.active === false) {
         o[k].off++;
@@ -2199,7 +2202,12 @@ function App() {
       if (!o[k]) return;
       const cl = data.clean[c.id];
       if (cl) {
+        // 間數（主管審核的待審徽章用）
         if (cl.status === "已通過") o[k].pass++;else if (cl.status === "退回") o[k].reject++;else o[k].wait++;
+        // 台數（深度清潔進度用）：一間 10 幾台就算 10 幾台，才公平。
+        // 用實際拍了幾張照片算（少拍的那幾台不算）；舊資料沒有照片明細就算 1 台。
+        const n = Math.max(1, Number(cl.shot) || 1);
+        if (cl.status === "已通過") o[k].passU += n;else if (cl.status === "退回") o[k].rejectU += n;else o[k].waitU += n;
       }
     });
     return o;
@@ -5176,7 +5184,7 @@ function App() {
         fontSize: 12,
         color: C.muted
       }
-    }, "\u6BCF\u7D44\u76EE\u6A19 ", data.config?.goal ?? 20, " \u9593")), stats && Object.keys(stats).map(k => {
+    }, "\u6BCF\u7D44\u76EE\u6A19 ", data.config?.goal ?? 20, " 台")), stats && Object.keys(stats).map(k => {
       const s = stats[k];
       return /*#__PURE__*/React.createElement("div", {
         key: k,
@@ -5199,18 +5207,18 @@ function App() {
           color: C.success,
           fontSize: 16
         }
-      }, s.pass), " / ", s.goal, s.wait > 0 && /*#__PURE__*/React.createElement("span", {
+      }, s.passU), " / ", s.goal, " 台", s.waitU > 0 && /*#__PURE__*/React.createElement("span", {
         style: {
           color: C.warn,
           marginLeft: 8
         }
-      }, "\u5F85\u5BE9 ", s.wait), s.reject > 0 && /*#__PURE__*/React.createElement("span", {
+      }, "\u5F85\u5BE9 ", s.waitU, " 台"), s.rejectU > 0 && /*#__PURE__*/React.createElement("span", {
         style: {
           color: C.danger,
           marginLeft: 8
         }
-      }, "\u9000\u56DE ", s.reject))), /*#__PURE__*/React.createElement(Bar, {
-        v: s.pass,
+      }, "\u9000\u56DE ", s.rejectU, " 台"))), /*#__PURE__*/React.createElement(Bar, {
+        v: s.passU,
         max: s.goal,
         color: C.blue
       }));

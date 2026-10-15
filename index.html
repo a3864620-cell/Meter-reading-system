@@ -2110,6 +2110,115 @@ function App() {
     };
   }, [data, month]);
 
+  /* ── 親送帳單：技師去抄表時順便帶帳單 ──
+     只看「親送」的客戶、而且是現在這個月；本月不用寄單的、已經送達的都不提醒 */
+  const handInfo = useCallback(c => {
+    if (!data || !c || c.send !== "親送" || c.active === false) return null;
+    if (month !== monthKey(new Date())) return null;
+    const i = billInfo(c);
+    if (i.skip) return null;
+    const b = data.bills?.[c.id] || {};
+    if (b.sent) return {
+      state: "done",
+      sent: b.sent
+    };
+    if (b.made) return {
+      state: "ready",
+      made: b.made,
+      no: b.no || ""
+    };
+    return {
+      state: "notmade"
+    };
+  }, [data, month, billInfo]);
+  const handTag = c => {
+    const h = handInfo(c);
+    if (!h || h.state === "done") return null;
+    const ready = h.state === "ready";
+    return /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        padding: "1px 7px",
+        borderRadius: 999,
+        background: ready ? "#f3ecfa" : "#eef1f5",
+        color: ready ? "#7a4fa3" : C.muted,
+        fontWeight: 700,
+        whiteSpace: "nowrap"
+      }
+    }, ready ? "📄 帶帳單" : "帳單還沒開");
+  };
+  /* 技師在現場按「帳單已送達」：直接寫進單據紀錄（跟單據管理按「今天送達」一樣） */
+  const [handBusy, setHandBusy] = useState("");
+  const markHandSent = async c => {
+    if (handBusy) return;
+    const key = month + "|" + c.id;
+    const d0 = new Date();
+    const t = d0.getFullYear() + "/" + pad(d0.getMonth() + 1) + "/" + pad(d0.getDate());
+    const day = v => {
+      const m = String(v || "").match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      return m ? m[1] + "/" + pad(m[2]) + "/" + pad(m[3]) : "";
+    };
+    const cur = billLatest[key] || data.bills?.[c.id] || {};
+    const next = {
+      made: day(cur.made) || t,
+      no: cur.no || "",
+      sent: t,
+      back: !!cur.back,
+      bdate: day(cur.bdate),
+      memo: cur.memo || ""
+    };
+    billLatest[key] = next;
+    setData(d => ({
+      ...d,
+      bills: {
+        ...(d.bills || {}),
+        [c.id]: {
+          ...((d.bills || {})[c.id] || {}),
+          ...next
+        }
+      }
+    }));
+    setHandBusy(c.id);
+    pendingSaves++;
+    const job = saveQueue.then(() => api("saveBill", {
+      month,
+      id: c.id,
+      owner: c.owner,
+      user,
+      data: next
+    }));
+    saveQueue = job.catch(() => {});
+    let r;
+    try {
+      r = await job;
+    } catch (e) {
+      r = {
+        ok: false,
+        error: e.message || String(e)
+      };
+    }
+    pendingSaves = Math.max(0, pendingSaves - 1);
+    setHandBusy("");
+    if (r && r.ok) {
+      billDone[key] = Date.now();
+      toast("帳單已送達 ✓");
+    } else {
+      failedBills[key] = {
+        month,
+        id: c.id,
+        owner: c.owner,
+        name: c.name,
+        user,
+        data: next,
+        error: r && r.error || "連線中斷",
+        at: Date.now(),
+        retrying: false
+      };
+      failedChanged_();
+      toast("⚠️ 沒有存成功，畫面最上面可以重新送出", 6000);
+    }
+  };
+
   /* 本月是否該抄（用來算進度分母） */
   const dueThisMonth = useCallback(c => {
     if (c.active === false) return false;
@@ -2626,7 +2735,57 @@ function App() {
         padding: "9px 14px",
         whiteSpace: "nowrap"
       })
-    }, "\u5FA9\u539F")), (tonerById[c.id] || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "\u5FA9\u539F")), (() => {
+      const h = handInfo(c);
+      if (!h) return null;
+      const b = data.bills?.[c.id] || {};
+      const md = v => {
+        const m = String(v || "").match(/^\d{4}[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        return m ? Number(m[1]) + "/" + Number(m[2]) : "";
+      };
+      if (h.state === "done") return /*#__PURE__*/React.createElement("div", {
+        style: card({
+          borderLeft: "4px solid " + C.success,
+          fontSize: 14,
+          color: C.success,
+          fontWeight: 600
+        })
+      }, "📄 本月帳單已送達（", md(h.sent), "）", b.back ? "，已繳回" : "");
+      const ready = h.state === "ready";
+      return /*#__PURE__*/React.createElement("div", {
+        style: card({
+          borderColor: ready ? "#dccbee" : C.line,
+          background: ready ? "#f8f3fd" : "#fff",
+          borderLeft: "4px solid " + (ready ? "#7a4fa3" : C.grey)
+        })
+      }, /*#__PURE__*/React.createElement("b", {
+        style: {
+          color: ready ? "#7a4fa3" : C.text,
+          fontSize: 16
+        }
+      }, ready ? "📄 這次要帶帳單" : "📄 這間要親送帳單，但還沒開單"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: C.muted,
+          margin: "6px 0 10px",
+          lineHeight: 1.7
+        }
+      }, ready ? "帳單 " + md(h.made) + " 已開好" + (h.no ? "（#" + h.no + "）" : "") + "，出門前記得帶。繳回方式：" + (c.rtn || "技師繳回簽收聯") : "出門前先跟助理確認帳單有沒有要一起帶。"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          if (!ready && !confirm("帳單還沒開單，確定已經送到了嗎？\n\n會同時記錄今天開單、今天送達。")) return;
+          markHandSent(c);
+        },
+        disabled: handBusy === c.id,
+        style: btnS(ready ? "primary" : "light", {
+          width: "100%",
+          padding: "13px",
+          opacity: handBusy === c.id ? .5 : 1,
+          ...(ready ? {
+            background: "#7a4fa3"
+          } : {})
+        })
+      }, handBusy === c.id ? "儲存中…" : "帳單已送達"));
+    })(), (tonerById[c.id] || []).length > 0 && /*#__PURE__*/React.createElement("div", {
       style: card({
         borderColor: "#cfe0f1",
         background: C.blueBg,
@@ -4774,7 +4933,7 @@ function App() {
           marginLeft: 6,
           color: C.blue
         }
-      }, cycText(c.cycle)), tonerTag(c.id))), /*#__PURE__*/React.createElement("div", {
+      }, cycText(c.cycle)), tonerTag(c.id), handTag(c))), /*#__PURE__*/React.createElement("div", {
         style: {
           textAlign: "right",
           flexShrink: 0,
@@ -5002,7 +5161,7 @@ function App() {
         style: {
           marginLeft: 4
         }
-      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id)), tonerLines(c.id)), /*#__PURE__*/React.createElement(DueBadge, {
+      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id), handTag(c)), tonerLines(c.id)), /*#__PURE__*/React.createElement(DueBadge, {
         d: d,
         small: true
       }))), /*#__PURE__*/React.createElement("button", {

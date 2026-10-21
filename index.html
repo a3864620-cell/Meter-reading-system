@@ -2322,6 +2322,35 @@ function App() {
     return o;
   }, [data, clients, dueThisMonth]);
 
+  /* ── 25 號前要收到帳單：最晚 sendBy 號送出，這個月還沒抄表的要盯 ── */
+  const sendBy = Number(data?.config?.sendBy) || 24;
+  const b25Left = () => {
+    // 離送單期限還剩幾天（看的是畫面上選的月份）
+    const now = new Date();
+    const [y, m] = String(month).split("-").map(Number);
+    const dl = new Date(y, m - 1, sendBy);
+    const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((dl - t0) / 86400000);
+  };
+  const b25Pending = c => !!(c && c.b25 && c.active !== false && data && !data.meter[c.id] && dueThisMonth(c));
+  const b25Tag = c => {
+    if (!b25Pending(c)) return null;
+    const d = b25Left();
+    const late = d < 0,
+      urgent = d <= 3;
+    return /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        padding: "1px 7px",
+        borderRadius: 999,
+        background: late ? C.danger : urgent ? "#fdf0e3" : "#f3ecfa",
+        color: late ? "#fff" : urgent ? C.warn : "#7a4fa3",
+        fontWeight: 700,
+        whiteSpace: "nowrap"
+      }
+    }, sendBy + "號前送單", late ? "・已過期" : d === 0 ? "・今天" : "・剩 " + d + " 天");
+  };
+
   /* ── 篩選後清單 ── */
   const showUrg = fStat === "近期該抄" || fStat === "未抄表";
   const listedBase = useMemo(() => {
@@ -2349,6 +2378,18 @@ function App() {
     });
   }, [clients, fOwner, fDist, fStat, kw, data, coolInfo, dueInfo, dueThisMonth]);
 
+  /* 有勾「25號前收到」、這個月還沒抄表的（不受「近期該抄」幾天內的限制，負責人／區域／搜尋照樣套用） */
+  const b25List = useMemo(() => {
+    const k = kw.trim();
+    return clients.filter(c => {
+      if (!b25Pending(c)) return false;
+      if (fOwner !== "全部" && c.owner !== fOwner) return false;
+      if (fDist !== "全部" && c.dist !== fDist) return false;
+      if (k && !(c.name.includes(k) || c.id.toUpperCase().includes(k.toUpperCase()))) return false;
+      return true;
+    });
+  }, [clients, fOwner, fDist, kw, data, dueThisMonth]);
+
   /* 各急迫度的數量，直接顯示在按鈕上 */
   const urgCount = useMemo(() => {
     const o = {
@@ -2362,11 +2403,14 @@ function App() {
       if (d.none || d.diff > d.lead) return;
       if (d.state === "over") o.逾期++;else if (d.state === "today") o.今天++;else o.即將++;
     });
+    o.送單 = b25List.length;
     return o;
-  }, [listedBase, dueInfo]);
+  }, [listedBase, dueInfo, b25List]);
   const listed = useMemo(() => {
     let arr = listedBase;
-    if (showUrg && fUrg !== "全部") {
+    if (fUrg === "送單") {
+      arr = b25List;
+    } else if (showUrg && fUrg !== "全部") {
       const want = {
         逾期: "over",
         今天: "today",
@@ -2388,7 +2432,7 @@ function App() {
       });
     }
     return arr;
-  }, [listedBase, fUrg, showUrg, dueInfo]);
+  }, [listedBase, fUrg, showUrg, dueInfo, b25List]);
 
   /* ── 動作 ── */
   async function toggleMeter(c, opt = {}) {
@@ -3788,6 +3832,8 @@ function App() {
     const [doAnchor, setDoAnchor] = useState(true);
     const [send, setSend] = useState("寄出");
     const [doSend, setDoSend] = useState(false); // 預設不勾，要改送單方式才勾
+    const [b25, setB25] = useState(true);
+    const [doB25, setDoB25] = useState(false);
     const [busyB, setBusyB] = useState(false);
     const dists = Array.from(new Set(clients.map(c => c.dist).filter(Boolean))).sort();
     const list = clients.filter(c => {
@@ -3801,14 +3847,15 @@ function App() {
     const opts = CYCLE_OPTS.concat([{ v: "不計", label: "不計（只寄租金）" }]);
     async function apply() {
       if (!picked.length) return toast("請先勾選客戶");
-      if (!doRent && !doOver && !doAnchor && !doSend) return toast("請至少勾一項要設定的東西");
+      if (!doRent && !doOver && !doAnchor && !doSend && !doB25) return toast("請至少勾一項要設定的東西");
       setBusyB(true);
       const r = await api("bulkCycle", {
         ids: picked.map(c => c.id),
         setRent: doRent, rent: doRent ? rent : "",
         setOver: doOver, over: doOver ? over : "",
         setAnchor: doAnchor, anchor: doAnchor ? anchor : "",
-        setSend: doSend, send: doSend ? send : ""
+        setSend: doSend, send: doSend ? send : "",
+        setB25: doB25, b25: doB25 ? b25 : false
       });
       setBusyB(false);
       if (!r.ok) return toast("失敗：" + r.error, 5000);
@@ -3859,9 +3906,14 @@ function App() {
             /*#__PURE__*/React.createElement("select", { value: send, disabled: !doSend, onChange: e => setSend(e.target.value), style: inp({ marginBottom: 0 }) },
               /*#__PURE__*/React.createElement("option", { value: "寄出" }, "寄出（郵寄，不需繳回）"),
               /*#__PURE__*/React.createElement("option", { value: "親送" }, "親送（技師送到客戶那邊）"),
-              /*#__PURE__*/React.createElement("option", { value: "" }, "未設定（照以前的方式）")))),
+              /*#__PURE__*/React.createElement("option", { value: "" }, "未設定（照以前的方式）"))),
+          row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
+              /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doB25, onChange: e => setDoB25(e.target.checked) }), "25號前收到"),
+            /*#__PURE__*/React.createElement("select", { value: b25 ? "Y" : "", disabled: !doB25, onChange: e => setB25(e.target.value === "Y"), style: inp({ marginBottom: 0 }) },
+              /*#__PURE__*/React.createElement("option", { value: "Y" }, "要（25 號前一定要收到）"),
+              /*#__PURE__*/React.createElement("option", { value: "" }, "不用（取消勾選）")))),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.blue, background: C.blueBg, borderRadius: 8, padding: "8px 10px", margin: "4px 0 10px", lineHeight: 1.7 } },
-          "套用後：租金 ", doRent ? cycleDesc_(rent, anchor, month) : "不變", "；超出 ", doOver ? cycleDesc_(over, anchor, month) : "不變", "；送單方式 ", doSend ? (send || "未設定") : "不變", "。沒勾的項目不會動到。"),
+          "套用後：租金 ", doRent ? cycleDesc_(rent, anchor, month) : "不變", "；超出 ", doOver ? cycleDesc_(over, anchor, month) : "不變", "；送單方式 ", doSend ? (send || "未設定") : "不變", "；25號前收到 ", doB25 ? (b25 ? "要" : "不用") : "不變", "。沒勾的項目不會動到。"),
         /*#__PURE__*/React.createElement("button", { onClick: apply, disabled: busyB || !picked.length, style: btnS("primary", { width: "100%" }) },
           busyB ? "套用中…" : "套用到已勾的 " + picked.length + " 間")));
   }
@@ -4254,6 +4306,7 @@ function App() {
       bday: "",
       rtn: RTNS[0],
       send: "",
+      b25: false,
       over: "",
       rent: "",
       anchor: "",
@@ -4310,7 +4363,8 @@ function App() {
         rent: String(f.rent || "").trim(),
         anchor: String(f.anchor || "").trim(),
         units: Math.min(30, Math.max(1, Number(f.units) || 1)),
-        send: f.send === "寄出" || f.send === "親送" ? f.send : ""
+        send: f.send === "寄出" || f.send === "親送" ? f.send : "",
+        b25: !!f.b25
       };
       // 修改既有客戶：畫面先更新、背景存檔，不用等網路（新增客戶還是要等，因為要確認編號沒撞到）
       if (editId) {
@@ -4523,7 +4577,39 @@ function App() {
         marginBottom: 12,
         lineHeight: 1.7
       }
-    }, "\u55AE\u64DA\u7BA1\u7406\u9801\u6703\u7528\u9019\u500B\u7B97\u5012\u6578\u63D0\u9192\u3002\u7559\u7A7A\u7684\u8A71\u4E0D\u6703\u63D0\u9192\uFF0C\u53EA\u986F\u793A\u72C0\u614B\u3002"), /*#__PURE__*/React.createElement("span", {
+    }, "\u55AE\u64DA\u7BA1\u7406\u9801\u6703\u7528\u9019\u500B\u7B97\u5012\u6578\u63D0\u9192\u3002\u7559\u7A7A\u7684\u8A71\u4E0D\u6703\u63D0\u9192\uFF0C\u53EA\u986F\u793A\u72C0\u614B\u3002"), /*#__PURE__*/React.createElement("label", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "12px",
+        marginBottom: 12,
+        borderRadius: 10,
+        border: "1.5px solid " + (f.b25 ? "#7a4fa3" : C.line),
+        background: f.b25 ? "#f8f3fd" : "#fff",
+        fontSize: 15,
+        fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: !!f.b25,
+      onChange: e => setF({
+        ...f,
+        b25: e.target.checked
+      }),
+      style: {
+        width: 20,
+        height: 20
+      }
+    }), /*#__PURE__*/React.createElement("span", null, "25 號前要收到帳單", /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        fontWeight: 400,
+        marginTop: 2
+      }
+    }, "勾了之後，這個月還沒抄表的話，客戶清單上方的「", sendBy, "號前送單」會列出來"))), /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "送單方式"), /*#__PURE__*/React.createElement("select", {
       value: f.send || "",
@@ -4841,7 +4927,7 @@ function App() {
         fontSize: 13,
         padding: "8px"
       })
-    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u8FD1\u671F\u8A72\u6284"), /*#__PURE__*/React.createElement("option", null, "\u672A\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u53EF\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u672C\u6708\u5DF2\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u4E0D\u5B9A\u671F"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u9000\u79DF"))), showUrg && /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u8FD1\u671F\u8A72\u6284"), /*#__PURE__*/React.createElement("option", null, "\u672A\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u6284\u8868"), /*#__PURE__*/React.createElement("option", null, "\u53EF\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u672C\u6708\u5DF2\u6E05\u6F54"), /*#__PURE__*/React.createElement("option", null, "\u4E0D\u5B9A\u671F"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u9000\u79DF"))), (showUrg || urgCount.送單 > 0 || fUrg === "送單") && /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 6,
@@ -4865,9 +4951,14 @@ function App() {
       k: "即將",
       bg: C.blue,
       fg: "#fff"
-    }].map(x => {
+    }, {
+      k: "送單",
+      label: sendBy + "號前送單",
+      bg: "#7a4fa3",
+      fg: "#fff"
+    }].filter(x => showUrg || x.k === "全部" || x.k === "送單").map(x => {
       const on = fUrg === x.k;
-      const n = urgCount[x.k] ?? 0;
+      const n = x.k === "全部" && !showUrg ? listedBase.length : urgCount[x.k] ?? 0;
       return /*#__PURE__*/React.createElement("button", {
         key: x.k,
         onClick: () => setFUrg(x.k),
@@ -4883,7 +4974,7 @@ function App() {
           border: "1.5px solid " + (on ? x.bg : x.k === "全部" ? C.line : x.bg),
           opacity: !on && n === 0 ? .4 : 1
         }
-      }, x.k === "全部" ? "全部" : x.k, " ", n);
+      }, x.label || x.k, " ", n);
     }))), /*#__PURE__*/React.createElement("div", {
       style: {
         padding: "10px 14px 30px",
@@ -4933,7 +5024,7 @@ function App() {
           marginLeft: 6,
           color: C.blue
         }
-      }, cycText(c.cycle)), tonerTag(c.id), handTag(c))), /*#__PURE__*/React.createElement("div", {
+      }, cycText(c.cycle)), tonerTag(c.id), handTag(c), b25Tag(c))), /*#__PURE__*/React.createElement("div", {
         style: {
           textAlign: "right",
           flexShrink: 0,
@@ -5161,7 +5252,7 @@ function App() {
         style: {
           marginLeft: 4
         }
-      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id), handTag(c)), tonerLines(c.id)), /*#__PURE__*/React.createElement(DueBadge, {
+      }, "\uFF08\u4F9D\u4E0A\u6708\u63A8\u7B97\uFF09"), tonerTag(c.id), handTag(c), b25Tag(c)), tonerLines(c.id)), /*#__PURE__*/React.createElement(DueBadge, {
         d: d,
         small: true
       }))), /*#__PURE__*/React.createElement("button", {

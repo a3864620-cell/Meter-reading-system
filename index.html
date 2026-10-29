@@ -1312,14 +1312,14 @@ function BillsPage(P) {
       fontSize: 11,
       marginTop: 2
     }
-  }, k)))), tally.逾期 > 0 && /*#__PURE__*/React.createElement("div", {
+  }, k === "已寄出" ? "已送達" : k)))), tally.逾期 > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       fontSize: 13,
       color: C.danger,
       fontWeight: 600
     }
-  }, "\u6709 ", tally.逾期, " \u9593\u5DF2\u8D85\u904E\u9001\u55AE\u65E5\u9084\u6C92\u5BC4\u51FA")), /*#__PURE__*/React.createElement("div", {
+  }, "\u6709 ", tally.逾期, " \u9593\u5DF2\u8D85\u904E\u9001\u55AE\u65E5\u9084\u6C92\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
     style: card()
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1364,7 +1364,9 @@ function BillsPage(P) {
       fontSize: 13,
       padding: "8px"
     })
-  }, /*#__PURE__*/React.createElement("option", null, "\u5F85\u8655\u7406"), /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u672A\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u5BC4\u51FA"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u7E73\u56DE"))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("option", null, "\u5F85\u8655\u7406"), /*#__PURE__*/React.createElement("option", null, "\u5168\u90E8"), /*#__PURE__*/React.createElement("option", null, "\u672A\u958B\u55AE"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u958B\u55AE"), /*#__PURE__*/React.createElement("option", {
+    value: "已寄出"
+  }, "已送達"), /*#__PURE__*/React.createElement("option", null, "\u5DF2\u7E73\u56DE"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 6,
@@ -1397,10 +1399,9 @@ function BillsPage(P) {
     const b = i.b || {};
     const isOpen = open === c.id;
     const fl = failed[month + "|" + c.id];
-    const isMail = c.send === "寄出";
-    const isHand = c.send === "親送";
-    const sw = isHand ? "送達" : "寄出"; // 親送的「寄出」改叫「送達」
-    const stText = isHand && i.st === "已寄出" ? "已送達" : i.st;
+    const isHand = c.send === "親送"; // 親送：開單 → 繳回；其他：開單 → 送達
+    const sw = "送達";
+    const stText = i.st === "已寄出" ? "已送達" : i.st;
     return /*#__PURE__*/React.createElement("div", {
       key: c.id,
       style: card({
@@ -1571,13 +1572,13 @@ function BillsPage(P) {
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
-        gridTemplateColumns: isMail ? "1fr 1fr" : "1fr 1fr 1fr",
+        gridTemplateColumns: "1fr 1fr",
         gap: 6,
         margin: "12px 0 8px",
         textAlign: "center",
         fontSize: 12
       }
-    }, (isMail ? [["① 開單", b.made], ["② 寄出", b.sent]] : [["① 開單", b.made], ["② " + sw, b.sent], ["③ 繳回", i.noNeed ? "—" : b.back ? b.bdate || "已繳回" : ""]]).map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+    }, (isHand ? [["① 開單", b.made], ["② 繳回", b.back ? b.bdate || "已繳回" : ""]] : [["① 開單", b.made], ["② 送達", b.sent]]).map(([k, v]) => /*#__PURE__*/React.createElement("div", {
       key: k,
       style: {
         padding: "7px 3px",
@@ -1594,23 +1595,23 @@ function BillsPage(P) {
         marginTop: 2,
         fontSize: 13
       }
-    }, v ? v === "—" ? "不需" : dayOnly(v).slice(5) || "✓" : "—")))), b.made && !b.sent && /*#__PURE__*/React.createElement("div", {
+    }, v ? dayOnly(v).slice(5) || "✓" : "—")))), b.made && !(isHand ? b.back : b.sent) && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.warn,
         marginBottom: 8
       }
-    }, "\u5DF2\u958B\u55AE ", waitDays(b.made), " \u5929\u9084\u6C92" + sw), /*#__PURE__*/React.createElement("div", {
+    }, "\u5DF2\u958B\u55AE ", waitDays(b.made), (isHand ? " 天還沒繳回" : " 天還沒送達")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
-        gridTemplateColumns: isMail ? "1fr 1fr" : "1fr 1fr 1fr",
+        gridTemplateColumns: "1fr 1fr",
         gap: 6,
         marginBottom: 12
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         if (b.made) {
-          if (!confirm(isMail ? "取消開單？\n\n寄出的紀錄也會一併清除。" : "取消開單？\n\n" + sw + "和繳回的紀錄也會一併清除。")) return;
+          if (!confirm(isHand ? "取消開單？\n\n繳回的紀錄也會一併清除。" : "取消開單？\n\n送達的紀錄也會一併清除。")) return;
           push(c, {
             made: "",
             sent: "",
@@ -1626,12 +1627,24 @@ function BillsPage(P) {
         padding: "11px 4px",
         color: b.made ? C.danger : "#fff"
       })
-    }, b.made ? "取消開單" : "今天開單"), /*#__PURE__*/React.createElement("button", {
+    }, b.made ? "取消開單" : "今天開單"), isHand ? /*#__PURE__*/React.createElement("button", {
+      onClick: () => push(c, b.back ? {
+        back: false,
+        bdate: ""
+      } : {
+        back: true,
+        bdate: today(),
+        made: b.made || today()
+      }),
+      style: btnS(b.back ? "light" : "accent", {
+        fontSize: 13,
+        padding: "11px 4px",
+        color: b.back ? C.danger : "#fff"
+      })
+    }, b.back ? "取消繳回" : "已繳回") : /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         if (b.sent) push(c, {
-          sent: "",
-          back: false,
-          bdate: ""
+          sent: ""
         });else push(c, {
           sent: today(),
           made: b.made || today()
@@ -1642,30 +1655,13 @@ function BillsPage(P) {
         padding: "11px 4px",
         color: b.sent ? C.danger : "#fff"
       })
-    }, b.sent ? "取消" + sw : "今天" + sw), !isMail && /*#__PURE__*/React.createElement("button", {
-      disabled: i.noNeed,
-      onClick: () => push(c, b.back ? {
-        back: false,
-        bdate: ""
-      } : {
-        back: true,
-        bdate: today(),
-        sent: b.sent || today(),
-        made: b.made || today()
-      }),
-      style: btnS(b.back ? "light" : "accent", {
-        fontSize: 13,
-        padding: "11px 4px",
-        opacity: i.noNeed ? .4 : 1,
-        color: b.back ? C.danger : "#fff"
-      })
-    }, b.back ? "取消繳回" : "已繳回")), /*#__PURE__*/React.createElement("div", {
+    }, b.sent ? "取消送達" : "今天送達")), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.muted,
         marginBottom: 10
       }
-    }, isMail ? "送單方式：寄出（不需繳回）" : (isHand ? "送單方式：親送　·　" : "") + "繳回方式：" + c.rtn, "\u3000\xB7\u3000\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定"), /*#__PURE__*/React.createElement("div", {
+    }, isHand ? "送單方式：親送（開單 → 繳回）　·　繳回方式：" + c.rtn : "送單方式：" + (c.send === "寄出" ? "寄出" : "未設定") + "（開單 → 送達）", "\u3000\xB7\u3000\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -1682,9 +1678,21 @@ function BillsPage(P) {
       style: inp({
         fontSize: 14
       })
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    })), isHand ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
       style: lbl
-    }, sw + "日"), /*#__PURE__*/React.createElement("input", {
+    }, "\u7E73\u56DE\u65E5"), /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: toInput(b.bdate),
+      onChange: e => push(c, {
+        bdate: toStore(e.target.value),
+        back: !!e.target.value
+      }),
+      style: inp({
+        fontSize: 14
+      })
+    })) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: lbl
+    }, "送達日"), /*#__PURE__*/React.createElement("input", {
       type: "date",
       value: toInput(b.sent),
       onChange: e => push(c, {
@@ -1700,18 +1708,6 @@ function BillsPage(P) {
       placeholder: "\u53EF\u7559\u7A7A",
       onCommit: v => push(c, {
         no: v
-      }),
-      style: inp({
-        fontSize: 14
-      })
-    })), !isMail && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-      style: lbl
-    }, "\u7E73\u56DE\u65E5"), /*#__PURE__*/React.createElement("input", {
-      type: "date",
-      value: toInput(b.bdate),
-      onChange: e => push(c, {
-        bdate: toStore(e.target.value),
-        back: !!e.target.value
       }),
       style: inp({
         fontSize: 14
@@ -2055,7 +2051,8 @@ function App() {
     };
     const b = data?.bills?.[c.id];
     // 送單方式「寄出」＝寄出就完成，不需繳回；親送／沒設定 → 照繳回方式
-    const noNeed = c.send === "寄出" || (c.rtn || "") === "不需繳回";
+    const isHand = c.send === "親送"; // 親送：開單 → 繳回；其他：開單 → 送達
+    const noNeed = !isHand; // 保留舊欄位名稱：只有親送需要繳回
     // 租金不是每個月寄的客戶,不是他的月份就完全不列入(不催、不算逾期、不進統計)
     if (!rentDue_(c, month)) return {
       none: true,
@@ -2070,9 +2067,13 @@ function App() {
     // 狀態：未開單 → 已開單 → 已寄出 → 已繳回
     let st = "未開單";
     if (b) {
-      if (b.back) st = "已繳回";else if (b.sent) st = "已寄出";else if (b.made) st = "已開單";
+      if (isHand) {
+        if (b.back) st = "已繳回";else if (b.made || b.sent) st = "已開單";
+      } else {
+        if (b.sent || b.back) st = "已寄出";else if (b.made) st = "已開單";
+      }
     }
-    const done = st === "已繳回" || noNeed && st === "已寄出";
+    const done = isHand ? st === "已繳回" : st === "已寄出";
     // 到期日：跟抄表一樣，先看上一次實際是幾號開單（沒開單日就看寄出日），
     // 這個月就用同一天當到期日；從來沒有單據紀錄的，才用客戶資料裡的「送單日」
     const lb = data?.lastBill?.[c.id];
@@ -2111,16 +2112,17 @@ function App() {
   }, [data, month]);
 
   /* ── 親送帳單：技師去抄表時順便帶帳單 ──
-     只看「親送」的客戶、而且是現在這個月；本月不用寄單的、已經送達的都不提醒 */
+     只看「親送」的客戶、而且是現在這個月；本月不用寄單的、助理已標記繳回的都不提醒。
+     技師這邊只提醒要帶帳單，不用按任何東西（繳回由助理在單據管理處理） */
   const handInfo = useCallback(c => {
     if (!data || !c || c.send !== "親送" || c.active === false) return null;
     if (month !== monthKey(new Date())) return null;
     const i = billInfo(c);
     if (i.skip) return null;
     const b = data.bills?.[c.id] || {};
-    if (b.sent) return {
+    if (b.back) return {
       state: "done",
-      sent: b.sent
+      sent: b.bdate || b.sent
     };
     if (b.made) return {
       state: "ready",
@@ -2147,78 +2149,6 @@ function App() {
       }
     }, ready ? "📄 帶帳單" : "帳單還沒開");
   };
-  /* 技師在現場按「帳單已送達」：直接寫進單據紀錄（跟單據管理按「今天送達」一樣） */
-  const [handBusy, setHandBusy] = useState("");
-  const markHandSent = async c => {
-    if (handBusy) return;
-    const key = month + "|" + c.id;
-    const d0 = new Date();
-    const t = d0.getFullYear() + "/" + pad(d0.getMonth() + 1) + "/" + pad(d0.getDate());
-    const day = v => {
-      const m = String(v || "").match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-      return m ? m[1] + "/" + pad(m[2]) + "/" + pad(m[3]) : "";
-    };
-    const cur = billLatest[key] || data.bills?.[c.id] || {};
-    const next = {
-      made: day(cur.made) || t,
-      no: cur.no || "",
-      sent: t,
-      back: !!cur.back,
-      bdate: day(cur.bdate),
-      memo: cur.memo || ""
-    };
-    billLatest[key] = next;
-    setData(d => ({
-      ...d,
-      bills: {
-        ...(d.bills || {}),
-        [c.id]: {
-          ...((d.bills || {})[c.id] || {}),
-          ...next
-        }
-      }
-    }));
-    setHandBusy(c.id);
-    pendingSaves++;
-    const job = saveQueue.then(() => api("saveBill", {
-      month,
-      id: c.id,
-      owner: c.owner,
-      user,
-      data: next
-    }));
-    saveQueue = job.catch(() => {});
-    let r;
-    try {
-      r = await job;
-    } catch (e) {
-      r = {
-        ok: false,
-        error: e.message || String(e)
-      };
-    }
-    pendingSaves = Math.max(0, pendingSaves - 1);
-    setHandBusy("");
-    if (r && r.ok) {
-      billDone[key] = Date.now();
-      toast("帳單已送達 ✓");
-    } else {
-      failedBills[key] = {
-        month,
-        id: c.id,
-        owner: c.owner,
-        name: c.name,
-        user,
-        data: next,
-        error: r && r.error || "連線中斷",
-        at: Date.now(),
-        retrying: false
-      };
-      failedChanged_();
-      toast("⚠️ 沒有存成功，畫面最上面可以重新送出", 6000);
-    }
-  };
-
   /* 本月是否該抄（用來算進度分母） */
   const dueThisMonth = useCallback(c => {
     if (c.active === false) return false;
@@ -2794,7 +2724,7 @@ function App() {
           color: C.success,
           fontWeight: 600
         })
-      }, "📄 本月帳單已送達（", md(h.sent), "）", b.back ? "，已繳回" : "");
+      }, "📄 本月帳單已繳回", md(h.sent) ? "（" + md(h.sent) + "）" : "");
       const ready = h.state === "ready";
       return /*#__PURE__*/React.createElement("div", {
         style: card({
@@ -2814,21 +2744,7 @@ function App() {
           margin: "6px 0 10px",
           lineHeight: 1.7
         }
-      }, ready ? "帳單 " + md(h.made) + " 已開好" + (h.no ? "（#" + h.no + "）" : "") + "，出門前記得帶。繳回方式：" + (c.rtn || "技師繳回簽收聯") : "出門前先跟助理確認帳單有沒有要一起帶。"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          if (!ready && !confirm("帳單還沒開單，確定已經送到了嗎？\n\n會同時記錄今天開單、今天送達。")) return;
-          markHandSent(c);
-        },
-        disabled: handBusy === c.id,
-        style: btnS(ready ? "primary" : "light", {
-          width: "100%",
-          padding: "13px",
-          opacity: handBusy === c.id ? .5 : 1,
-          ...(ready ? {
-            background: "#7a4fa3"
-          } : {})
-        })
-      }, handBusy === c.id ? "儲存中…" : "帳單已送達"));
+      }, ready ? "帳單 " + md(h.made) + " 已開好" + (h.no ? "（#" + h.no + "）" : "") + "，出門前記得帶。" : "出門前先跟助理確認帳單有沒有要一起帶。"));
     })(), (tonerById[c.id] || []).length > 0 && /*#__PURE__*/React.createElement("div", {
       style: card({
         borderColor: "#cfe0f1",
@@ -2921,7 +2837,7 @@ function App() {
         fontSize: 12,
         color: C.muted
       }
-    }, "\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定", c.send === "寄出" ? "\u3000\xB7\u3000寄出（不需繳回）" : (c.send === "親送" ? "\u3000\xB7\u3000親送" : "") + "\u3000\xB7\u3000\u7E73\u56DE\uFF1A" + (c.rtn || "技師繳回簽收聯")), /*#__PURE__*/React.createElement("div", {
+    }, "\u9001\u55AE\u65E5\uFF1A", c.bday ? "每月 " + c.bday + " 號" : "未設定", c.send === "親送" ? "\u3000\xB7\u3000親送（開單 → 繳回）\u3000\xB7\u3000\u7E73\u56DE\uFF1A" + (c.rtn || "技師繳回簽收聯") : "\u3000\xB7\u3000" + (c.send === "寄出" ? "寄出" : "送達") + "（開單 → 送達）"), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -3904,9 +3820,9 @@ function App() {
           row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
               /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doSend, onChange: e => setDoSend(e.target.checked) }), "送單方式"),
             /*#__PURE__*/React.createElement("select", { value: send, disabled: !doSend, onChange: e => setSend(e.target.value), style: inp({ marginBottom: 0 }) },
-              /*#__PURE__*/React.createElement("option", { value: "寄出" }, "寄出（郵寄，不需繳回）"),
+              /*#__PURE__*/React.createElement("option", { value: "寄出" }, "寄出（郵寄）"),
               /*#__PURE__*/React.createElement("option", { value: "親送" }, "親送（技師送到客戶那邊）"),
-              /*#__PURE__*/React.createElement("option", { value: "" }, "未設定（照以前的方式）"))),
+              /*#__PURE__*/React.createElement("option", { value: "" }, "未設定（開單 → 送達）"))),
           row(/*#__PURE__*/React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 6 } },
               /*#__PURE__*/React.createElement("input", { type: "checkbox", checked: doB25, onChange: e => setDoB25(e.target.checked) }), "25號前收到"),
             /*#__PURE__*/React.createElement("select", { value: b25 ? "Y" : "", disabled: !doB25, onChange: e => setB25(e.target.value === "Y"), style: inp({ marginBottom: 0 }) },
@@ -4358,7 +4274,7 @@ function App() {
         cycle: Number(f.cycle ?? 1),
         active: f.active !== false,
         bday: f.bday || "",
-        rtn: f.rtn || RTNS[0],
+        rtn: f.send === "親送" && (!f.rtn || f.rtn === "不需繳回") ? RTNS[0] : f.rtn || RTNS[0],
         over: String(f.over || "").trim(),
         rent: String(f.rent || "").trim(),
         anchor: String(f.anchor || "").trim(),
@@ -4622,9 +4538,9 @@ function App() {
       })
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
-    }, "未設定（照以前的方式）"), /*#__PURE__*/React.createElement("option", {
+    }, "未設定（開單 → 送達）"), /*#__PURE__*/React.createElement("option", {
       value: "寄出"
-    }, "寄出（郵寄，不需繳回）"), /*#__PURE__*/React.createElement("option", {
+    }, "寄出（郵寄）"), /*#__PURE__*/React.createElement("option", {
       value: "親送"
     }, "親送（技師送到客戶那邊）")), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4633,7 +4549,7 @@ function App() {
         marginBottom: 12,
         lineHeight: 1.7
       }
-    }, f.send === "寄出" ? "寄出的客戶，單據管理只有「開單 → 寄出」兩步，寄出就算完成。" : f.send === "親送" ? "親送的客戶，單據管理是「開單 → 送達 → 繳回」，下面選繳回方式。" : "還沒設定的客戶完全照以前的方式運作，等你有空再一間一間設定。"), f.send !== "寄出" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    }, f.send === "親送" ? "親送的客戶，單據管理是「開單 → 繳回」，技師只需要帶帳單，下面選繳回方式。" : "親送以外的客戶（寄出、沒設定），單據管理都是「開單 → 送達」，不用繳回。"), f.send === "親送" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
       style: lbl
     }, "\u7E73\u56DE\u65B9\u5F0F"), /*#__PURE__*/React.createElement("select", {
       value: f.rtn || RTNS[0],
@@ -4644,7 +4560,7 @@ function App() {
       style: inp({
         marginBottom: 12
       })
-    }, (f.send === "親送" ? ["技師繳回簽收聯", "技師收款後繳回", "不需繳回"].concat(f.rtn && RTNS.indexOf(f.rtn) >= 0 && ["技師繳回簽收聯", "技師收款後繳回", "不需繳回"].indexOf(f.rtn) < 0 ? [f.rtn] : []) : RTNS).map(x => /*#__PURE__*/React.createElement("option", {
+    }, (["技師繳回簽收聯", "技師收款後繳回"].concat(f.rtn && RTNS.indexOf(f.rtn) >= 0 && ["技師繳回簽收聯", "技師收款後繳回", "不需繳回"].indexOf(f.rtn) < 0 ? [f.rtn] : [])).map(x => /*#__PURE__*/React.createElement("option", {
       key: x
     }, x)))), /*#__PURE__*/React.createElement("span", {
       style: lbl
